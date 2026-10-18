@@ -34,7 +34,7 @@ window.__ModuleLoader__.load({
     function PickPanel() {
       const frame = useRef(null)
       const [meta, setMeta] = useState(null)
-      const [h, setH] = useState(720)
+      const [frameH, setFrameH] = useState(720)
 
       useEffect(() => {
         let alive = true
@@ -52,12 +52,12 @@ window.__ModuleLoader__.load({
             const doc = frame.current && frame.current.contentDocument
             if (doc && doc.body) {
               const need = Math.max(720, doc.body.scrollHeight + 40)
-              if (Math.abs(need - h) > 40) setH(need)
+              if (Math.abs(need - frameH) > 40) setFrameH(need)
             }
           } catch { /* 跨域就不管，保持默认高度 */ }
         }, 1500)
         return () => clearInterval(t)
-      }, [h])
+      }, [frameH])
 
       const tip = !meta
         ? L('正在读取目录…', 'Loading catalog…')
@@ -80,7 +80,7 @@ window.__ModuleLoader__.load({
           title: 'dsh-pick',
           style: {
             width: '100%',
-            height: h + 'px',
+            height: frameH + 'px',
             border: '1px solid ' + C.border,
             borderRadius: '10px',
             background: 'transparent',
