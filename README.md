@@ -1,0 +1,118 @@
+# dsh-pick
+
+**帮你在 DSH 生态里选对插件。**
+
+说需求 → 找候选 → 多维比较 → 出结论。下载量只是证据，判断才算数。
+
+> 定位对比：`dsh-find-plugin` 负责「**找到**」（搜 GitHub 仓库，按 star 排）；
+> `dsh-pick` 负责「**挑对**」（算去噪指标，给首选 / 备选 / 不推荐）。
+> 一个 `find_dsh_plugin`，一个 `pick_plugin`。
+
+---
+
+## 为什么需要它
+
+npm 官网和各类 stat 站能看数字，但看数字回答不了「我该装哪个」。
+
+更麻烦的是，**npm 下载量是噪声极大的指标**：版本一发布，CI、镜像、npm 客户端缓存刷新会把当天数字推高一个数量级。按原始下载量排出来的「第一」，很可能只是「发版本最勤的那个」。
+
+所以 `dsh-pick` 的核心不是下载量，而是**去噪后的指标**：
+
+| 指标 | 含义 |
+|---|---|
+| 日常基线 | 扣掉发布日与次日后的每日中位数，最接近真实使用量 |
+| 近 7 日环比 | 在涨还是在凉 |
+| 版本节奏 | 平均几天发一个版本，维护者的投入度 |
+| 最近更新 | 是不是已经弃坑 |
+| 健康度 | 以上四项加权，基线 40% + 增速 25% + 新鲜度 20% + 节奏 15% |
+
+效果示例：`dshmarket` 周下载 160,042，日常基线只有 19,721 —— 相差 8 倍。
+
+---
+
+## 用法
+
+```sh
+npm i -g dsh-pick      # 或 npx dsh-pick
+
+dsh-pick build --deep 180          # 抓目录 + 算去噪指标
+dsh-pick serve --port 8891         # 起本地服务，打开面板
+```
+
+装好后浏览器开 `http://127.0.0.1:8891/`。
+
+### 命令
+
+| 命令 | 作用 |
+|---|---|
+| `build [--deep N] [--pages N]` | 抓目录并算去噪指标 |
+| `build --deep-only` | 只补算缺失的去噪指标（不用重抓目录，省 5 分钟） |
+| `search "<需求>"` | 按需求描述找候选 |
+| `rank [--metric ...] [--cat ...]` | 排行榜，指标支持 `weekly` / `baseline` / `growth` / `score` |
+| `stats <pkg> [pkg...]` | 精确数据，目录没有就实时查 npm |
+| `serve [--port N]` | 本地预览面板 |
+
+示例：
+
+```sh
+dsh-pick search "我想装个数据库"
+dsh-pick search "任务完成时给我发微信通知"
+dsh-pick rank --metric baseline --cat 记忆与上下文 --limit 20
+```
+
+---
+
+## 结构
+
+```
+dsh-pick/
+├── package.json
+├── bin/dsh-pick.js     CLI 入口
+├── lib/
+│   ├── engine.js       数据引擎：抓目录、算指标、查询（一个引擎，三个入口）
+│   ├── classify.js     13 类 + 其他，关键词加权分类
+│   ├── metrics.js      去噪指标：基线 / 增速 / 节奏 / 新鲜度 / 健康度
+│   └── words.js        需求 → 搜索词（同义词 + 中文二元切分），CLI 与面板共用
+├── data/catalog.json   目录产物（2250 个包，其中 332 个带去噪指标）
+└── web/
+    ├── panel.html      选插件面板
+    └── panel.js        面板逻辑
+```
+
+---
+
+## 数据口径
+
+- **来源**：`registry.npmjs.org`（元数据、版本发布历史）+ `api.npmjs.org/downloads`（下载量）
+- **滞后**：npm 统计约滞后 5 天，页面显示的「数据截止」是最后一个已汇总的完整日
+- **覆盖**：npm 上带 `dsh-plugin` 关键字的 2,250 个包（search 接口深分页上限约 2,250）
+- **去噪范围**：只有周下载 Top 332 会抓 30 天日序列和发布历史，其余只有周/月下载量
+- **下载量口径**：含 CI、镜像源、爬虫、缓存回源等非人类流量，**不等于用户数**
+
+---
+
+## 已实现 / 待做
+
+**已实现**
+- 目录构建（`build` / `build --deep-only`，带 3 轮补抓对付限流）
+- 13 类自动分类
+- 去噪指标 + 健康度
+- 需求搜索（同义词 + 中文二元切分）
+- 排行榜（4 种指标 × 分类筛选）
+- 选插件四步流程 + 规则版结论
+- 结论导出为独立网页
+- 我的监控（localStorage）
+
+**待做（见方案文档）**
+- DSH 插件形态：托管端 `plugin/index.js` + `plugin/client.js` + `cordis.patch.yml`
+- 5 + 2 个 AI 工具：`pick_ranking` / `pick_search` / `pick_stats` / `pick_compare` / `pick_trend` / `pick_recommend` / `pick_export`
+- skill `plugin-analyst`（意图路由 + 口径说明 + 禁止 AI 自己推算数字）
+- AI 语义分类，把「其他」从 29% 压到 10% 以内
+- 周报（可指定方向）
+- PDF 导出（DSH Desktop 可用 Electron `printToPDF`）
+
+---
+
+## 许可
+
+MIT

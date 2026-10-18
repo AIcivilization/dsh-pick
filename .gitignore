@@ -1,0 +1,4 @@
+node_modules/
+*.log
+.DS_Store
+# catalog.json 是 build 产物，但体积可控且部署时需要，故提交

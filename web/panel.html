@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6bff'/%3E%3Cpath d='M8 20l5-6 4 4 7-9' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>dsh-pick · DSH 插件选型助手</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#fff; --line:#e6e8ec; --soft:#f1f3f6;
+  --text:#1a1e26; --t2:#58606e; --t3:#8b95a4;
+  --accent:#2f6bff; --accent-bg:#eaf0ff;
+  --ok:#0f9d58; --ok-bg:#e7f6ee;
+  --warn:#d97a06; --warn-bg:#fdf3e3;
+  --bad:#c94040; --bad-bg:#fdecec;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.55;padding:0 20px 60px;
+}
+.wrap{max-width:1180px;margin:0 auto}
+a{color:var(--accent);text-decoration:none}
+
+/* ---------- 顶栏 ---------- */
+.bar{position:sticky;top:0;z-index:40;background:rgba(245,246,248,.92);backdrop-filter:blur(8px);
+  padding:16px 0 12px;border-bottom:1px solid var(--line);margin-bottom:22px}
+.bar .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none}
+h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
+.tagline{font-size:12px;color:var(--t3);margin-top:2px}
+.meta{margin-left:auto;font-size:11.5px;color:var(--t3);text-align:right;line-height:1.7}
+.meta b{color:var(--t2);font-weight:600;font-variant-numeric:tabular-nums}
+.tabs{display:flex;gap:2px;margin-top:14px;background:var(--soft);border-radius:9px;padding:3px;width:max-content}
+.tabs button{appearance:none;border:none;background:transparent;font-family:inherit;font-size:12.5px;
+  font-weight:600;color:var(--t3);padding:7px 16px;border-radius:6px;cursor:pointer}
+.tabs button.on{background:#fff;color:var(--text);box-shadow:0 1px 2px rgba(16,24,40,.09)}
+
+/* ---------- 选插件 ---------- */
+.ask{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:18px}
+.ask label{display:block;font-size:12.5px;color:var(--t3);margin-bottom:10px}
+.ask .row{display:flex;gap:10px}
+.ask input{
+  flex:1;appearance:none;border:1px solid var(--line);border-radius:10px;padding:13px 16px;
+  font-size:14.5px;font-family:inherit;background:#fcfcfd;color:var(--text)
+}
+.ask input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,107,255,.12);background:#fff}
+.btn{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:inherit;
+  font-size:13.5px;font-weight:600;padding:0 22px;border-radius:10px;cursor:pointer;white-space:nowrap}
+.btn:hover{filter:brightness(1.07)}
+.btn.ghost{background:#fff;color:var(--accent)}
+.btn.ghost:hover{background:var(--accent-bg);filter:none}
+.btn:disabled{opacity:.5;cursor:default}
+.cand .ok{font-size:9.5px;background:var(--ok-bg);color:#0b7a45;border-radius:20px;padding:1px 6px;font-weight:700;flex:none}
+.cand .nook{font-size:9.5px;background:#f0f2f5;color:var(--t3);border-radius:20px;padding:1px 6px;flex:none}
+.examples{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+.examples span{font-size:11.5px;color:var(--t3);align-self:center}
+.chip{background:var(--soft);color:var(--t2);border:1px solid transparent;border-radius:20px;
+  padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+.chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
+.section{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:19px 20px;margin-bottom:16px}
+.section h2{margin:0 0 3px;font-size:14.5px;font-weight:650;display:flex;align-items:center;gap:9px}
+.section h2 .n{background:var(--accent);color:#fff;width:19px;height:19px;border-radius:6px;
+  font-size:11px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.section .cap{margin:0 0 15px;font-size:12px;color:var(--t3)}
+
+/* ---------- 候选卡 ---------- */
+.cands{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:11px}
+.cand{border:1px solid var(--line);border-radius:11px;padding:13px 14px;background:#fcfcfd;
+  display:flex;gap:11px;cursor:pointer;transition:border-color .15s,background .15s;position:relative}
+.cand:hover{border-color:#c6d4f5}
+.cand.on{border-color:var(--accent);background:var(--accent-bg)}
+.cand .box{width:17px;height:17px;border:1.5px solid #b9c2ce;border-radius:5px;flex:none;margin-top:2px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;background:#fff}
+.cand.on .box{background:var(--accent);border-color:var(--accent)}
+.cand .body{min-width:0;flex:1}
+.cand .nm{font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cand .nm .v{font-size:10.5px;color:var(--t3);font-weight:500}
+.cand .rel{font-size:10px;background:var(--accent-bg);color:var(--accent);border-radius:20px;
+  padding:1px 7px;font-weight:700;margin-left:auto;flex:none}
+.cand .d{font-size:11.5px;color:var(--t2);margin:5px 0 8px;line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cand .kv{display:flex;gap:13px;font-size:11px;color:var(--t3);flex-wrap:wrap}
+.cand .kv b{color:var(--t2);font-weight:650;font-variant-numeric:tabular-nums}
+.empty{color:var(--t3);font-size:13px;text-align:center;padding:26px 0}
+
+/* ---------- 对比表 ---------- */
+.tblwrap{overflow-x:auto;margin:0 -4px}
+table.cmp{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px}
+table.cmp th,table.cmp td{padding:10px 11px;text-align:right;border-bottom:1px solid var(--soft);white-space:nowrap}
+table.cmp th:first-child,table.cmp td:first-child{text-align:left;color:var(--t3);font-size:11.5px;font-weight:600}
+table.cmp thead th{color:var(--text);font-weight:650;font-size:12.5px}
+table.cmp thead th i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+table.cmp tbody tr:last-child td{border-bottom:none}
+td.best{color:var(--ok);font-weight:700}
+td.best::after{content:' ★';font-size:9px}
+.miss{color:#b9c2ce}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- 结论 ---------- */
+.verdict{border-radius:11px;padding:14px 16px;margin-bottom:11px;border:1px solid}
+.verdict.win{background:var(--ok-bg);border-color:#bfe6d1}
+.verdict.alt{background:var(--warn-bg);border-color:#f2ddb6}
+.verdict.no{background:var(--bad-bg);border-color:#f2cccc}
+.verdict h4{margin:0 0 6px;font-size:13px;display:flex;align-items:center;gap:7px}
+.verdict.win h4{color:#0b7a45}.verdict.alt h4{color:#a8620a}.verdict.no h4{color:#a52f2f}
+.verdict p{margin:0;font-size:12.5px;color:var(--t2);line-height:1.7}
+.verdict p b{color:var(--text);font-weight:650}
+.rule{font-size:11.5px;color:var(--t3);margin-top:12px;padding-top:11px;border-top:1px dashed var(--line);line-height:1.8}
+
+/* ---------- 排行榜 ---------- */
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.filters select{appearance:none;border:1px solid var(--line);border-radius:8px;padding:7px 11px;
+  font-family:inherit;font-size:12.5px;background:#fff;color:var(--t2);cursor:pointer}
+table.rank{width:100%;border-collapse:collapse;font-size:12.5px}
+table.rank th{text-align:left;font-size:11px;color:var(--t3);font-weight:600;padding:0 10px 9px;border-bottom:1px solid var(--line)}
+table.rank td{padding:9px 10px;border-bottom:1px solid var(--soft);color:var(--t2);font-variant-numeric:tabular-nums}
+table.rank tbody tr:hover td{background:#fafbfc}
+table.rank td.nm{color:var(--text);font-weight:650;font-variant-numeric:normal}
+td.r,th.r{text-align:right}
+td.up{color:var(--ok);font-weight:600}
+td.down{color:var(--bad);font-weight:600}
+.catpill{font-size:10.5px;background:var(--soft);color:var(--t2);border-radius:20px;padding:2px 8px;white-space:nowrap}
+
+/* ---------- 监控 ---------- */
+.mon{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--soft)}
+.mon:last-child{border-bottom:none}
+.mon .nm{font-size:13px;font-weight:650;flex:1}
+.mon .x{appearance:none;border:none;background:none;color:var(--t3);cursor:pointer;font-size:16px;padding:0 4px}
+.mon .x:hover{color:var(--bad)}
+
+.foot{font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:6px}
+.foot b{color:var(--t2);font-weight:650}
+.spark{display:inline-flex;align-items:flex-end;gap:1px;height:16px;vertical-align:middle}
+.spark i{width:3px;background:#b9c2ce;border-radius:1px;display:block}
+.hidden{display:none!important}
+@media(max-width:720px){
+  body{padding:0 12px 48px}
+  .meta{margin-left:0;text-align:left;width:100%}
+  .ask{padding:17px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="bar">
+    <div class="top">
+      <div class="logo">Pick</div>
+      <div>
+        <h1>DSH 插件选型助手</h1>
+        <div class="tagline">说需求 → 找候选 → 多维比较 → 出结论。下载量是证据，判断归你。</div>
+      </div>
+      <div class="meta" id="meta">正在加载目录…</div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button data-tab="pick" class="on">选插件</button>
+      <button data-tab="rank">排行榜</button>
+      <button data-tab="watch">我的监控 <span id="watchCount"></span></button>
+    </div>
+  </div>
+
+  <!-- ============ Tab 1：选插件 ============ -->
+  <div id="tab-pick">
+    <div class="ask">
+      <label>你想解决什么问题？</label>
+      <div class="row">
+        <input id="need" placeholder="例如：我想装个数据库 / 我想让 DSH 能连微信 / 记忆能力" autocomplete="off">
+        <button class="btn" id="btnFind">找候选</button>
+      </div>
+      <div class="examples">
+        <span>试试：</span>
+        <button class="chip">数据库</button>
+        <button class="chip">微信通知</button>
+        <button class="chip">记忆</button>
+        <button class="chip">终端美化</button>
+        <button class="chip">代码审查</button>
+        <button class="chip">费用统计</button>
+        <button class="chip">远程服务器</button>
+      </div>
+    </div>
+
+    <div class="section hidden" id="secCand">
+      <h2><span class="n">2</span>候选 <span style="font-size:11.5px;color:var(--t3);font-weight:500" id="candCount"></span></h2>
+      <p class="cap">点选 2~6 个进行比较。排序按「相关性 × 下载量」，下载量只做微弱加权，避免发版本最勤的挤掉真正相关的。</p>
+      <div class="cands" id="cands"></div>
+    </div>
+
+    <div class="section hidden" id="secCmp">
+      <h2><span class="n">3</span>比较</h2>
+      <p class="cap">★ 为该指标当前最优。<b>日常基线</b>已扣掉版本发布日与次日的拉取虚高，比原始下载量更接近真实使用量。</p>
+      <div class="tblwrap">
+        <table class="cmp"><thead id="cmpHead"></thead><tbody id="cmpBody"></tbody></table>
+      </div>
+      <div class="rule" id="cmpNote"></div>
+    </div>
+
+    <div class="section hidden" id="secVerdict">
+      <h2><span class="n">4</span>结论</h2>
+      <p class="cap">以下判断由本地规则给出，依据就是上面这张表里的数字。装上 DSH 插件版后，这一步由 AI 生成，能结合你的具体场景解释取舍。</p>
+      <div id="verdicts"></div>
+      <div style="display:flex;gap:9px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn ghost" id="btnExport">导出结论（网页）</button>
+        <button class="btn ghost" id="btnWatch">加入我的监控</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>排行榜</h2>
+      <p class="cap">换一种方式发现：按去噪后的指标看整个生态。</p>
+      <div class="filters" id="rankFilters">
+        <button class="chip on" data-m="base">日常基线</button>
+        <button class="chip" data-m="w">周下载</button>
+        <button class="chip" data-m="growth">增速最快</button>
+        <button class="chip" data-m="s">健康度</button>
+        <select id="rankCat"></select>
+      </div>
+      <div class="tblwrap">
+        <table class="rank">
+          <thead><tr>
+            <th style="width:44px">#</th><th>插件</th><th>分类</th>
+            <th class="r">基线</th><th class="r">周下载</th><th class="r">环比</th>
+            <th class="r">版本节奏</th><th class="r">最近更新</th>
+          </tr></thead>
+          <tbody id="rankBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Tab 2：监控 ============ -->
+  <div id="tab-watch" class="hidden">
+    <div class="section">
+      <h2>我的监控</h2>
+      <p class="cap">存在浏览器本地（localStorage），不上传。数据取自目录，目录每天重建一次。</p>
+      <div id="watchList"></div>
+    </div>
+    <div class="section">
+      <h2>对比图</h2>
+      <p class="cap">对数刻度，否则头部插件会把其余压成一条线。</p>
+      <div id="watchChart"></div>
+    </div>
+  </div>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<script type="module" src="/web/panel.js"></script>
+</body>
+</html>
