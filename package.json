@@ -3,12 +3,25 @@
   "version": "0.2.1",
   "description": "帮你在 DSH 生态里选对插件：说需求 → 找候选 → 多维比较 → 出结论。下载量是证据，AI 是推理。",
   "type": "module",
-  "bin": { "dsh-pick": "bin/dsh-pick.js" },
-  "dsh": {
-    "bundle": { "patch": "./plugin/cordis.patch.yml" },
-    "client": { "platform": "web" }
+  "bin": {
+    "dsh-pick": "bin/dsh-pick.js"
   },
-  "files": ["bin", "lib", "plugin", "web", "data", "README.md"],
+  "dsh": {
+    "bundle": {
+      "patch": "./plugin/cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "files": [
+    "bin",
+    "lib",
+    "plugin",
+    "web",
+    "data",
+    "README.md"
+  ],
   "keywords": [
     "dsh-plugin",
     "dsh-plugins",
@@ -25,5 +38,7 @@
     "plugin-market"
   ],
   "license": "MIT",
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
