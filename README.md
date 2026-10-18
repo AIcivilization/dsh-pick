@@ -38,7 +38,8 @@ npm 官网和各类 stat 站能看数字，但看数字回答不了「我该装�
 dsh plugin --profile web add dsh-pick
 ```
 
-装完重启 `dsh web`，在**右侧栏**的引导页点「选插件」，就是完整的选插件面板（**设置 → dsh-pick** 里也暂时保留一份）。
+装完重启 `dsh web`，在**右侧栏**的引导页点「选插件」，就是完整的选插件面板。
+**设置 → dsh-pick** 是精简页：版本 / 更新 / 卸载、怎么打开面板、数据口径。
 面板顶部一行：插件名、当前版本号、更新按钮，最右侧是卸载按钮——更新和卸载都交给 DSH 自己的插件管理器，完成后重启 DSH 生效。
 
 首次使用要先生成目录（在 dsh-pick 的安装目录下，或任意目录）：
@@ -96,7 +97,7 @@ dsh-pick/
 ├── data/catalog.json   目录产物
 ├── plugin/
 │   ├── index.js        DSH 宿主端：挂 /api-dsh-pick/* 路由
-│   ├── client.js       右侧栏页签 + 设置页面板（iframe 复用 web/panel.html）
+│   ├── client.js       右侧栏页签（iframe 复用 web/panel.html）+ 设置页精简版
 │   └── cordis.patch.yml 插进 DSH
 └── web/
     ├── panel.html      选插件面板（独立调试用，也是插件内嵌的同一份）

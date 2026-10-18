@@ -2,8 +2,8 @@
 // plugin/client.js — dsh-pick 的设置页
 //
 // 手写单文件 bundle，没有构建链：由 dsh web 客户端的 ModuleLoader 注入
-// （写法照 dsh-model / dsh-vps-manager）。挂两处：DSH 右侧栏的一个页签（主入口），
-// 和「设置 → dsh-pick」（暂时保留，内容相同）。
+// （写法照 dsh-model / dsh-vps-manager）。挂两处：DSH 右侧栏的一个页签（完整面板），
+// 和「设置 → dsh-pick」（精简版：版本 / 更新 / 卸载、怎么打开、数据口径）。
 //
 // 界面本身就是一个 iframe，指向宿主路由 /api-dsh-pick/panel —— 面板那套 UI
 // 是独立调试过的（dsh-pick serve 直接能开），这里原样复用，不再用 React 重写一遍。
@@ -15,7 +15,7 @@ window.__ModuleLoader__.load({
     const module = { exports: {} }
     const React = require('react')
     const h = React.createElement
-    const { useEffect, useRef, useState } = React
+    const { useEffect, useState } = React
 
     // 语言：跟着页面（dsh 只有中、英两种）
     const isZh = () => {
@@ -137,83 +137,90 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /**
-     * 面板本体。fill = 放在右侧栏里：占满栏高，iframe 自己滚动；
-     * 否则（设置页）iframe 跟着内容长高，由设置页滚动
-     */
-    function PickPanel({ fill }) {
-      const frame = useRef(null)
-      const [meta, setMeta] = useState(null)
-      const [frameH, setFrameH] = useState(720)
-
-      useEffect(() => {
-        let alive = true
-        fetch('/api-dsh-pick/meta', { credentials: 'same-origin' })
-          .then(r => r.json())
-          .then(j => { if (alive) setMeta(j) })
-          .catch(() => {})
-        return () => { alive = false }
-      }, [])
-
-      useEffect(() => {
-        if (fill) return undefined
-        // iframe 里改不了高度（跨文档），用一个粗策略：内容高差太多就跟着长
-        const t = setInterval(() => {
-          try {
-            const doc = frame.current && frame.current.contentDocument
-            if (doc && doc.body) {
-              const need = Math.max(720, doc.body.scrollHeight + 40)
-              if (Math.abs(need - frameH) > 40) setFrameH(need)
-            }
-          } catch { /* 跨域就不管，保持默认高度 */ }
-        }, 1500)
-        return () => clearInterval(t)
-      }, [frameH, fill])
-
-      const tip = !meta
-        ? L('正在读取目录…', 'Loading catalog…')
-        : meta.total
-          ? L(
-              `目录 ${meta.total.toLocaleString()} 个插件 · 去噪指标 ${meta.deepCount} 个 · 数据截止 ${meta.anchor}`,
-              `${meta.total.toLocaleString()} plugins · ${meta.deepCount} with denoised metrics · as of ${meta.anchor}`)
-          : L('目录未生成：在 dsh-pick 目录跑一次 dsh-pick build', 'Catalog not built yet: run `dsh-pick build`')
-
+    /** 右侧栏里的完整面板：标题行 + 占满栏高的 iframe（iframe 自己滚动；目录信息面板里自带） */
+    function PickPanel() {
       return h('div', {
-        style: fill
-          ? { color: C.text, height: '100%', display: 'flex', flexDirection: 'column', padding: '10px 12px', boxSizing: 'border-box' }
-          : { color: C.text },
+        style: { color: C.text, height: '100%', display: 'flex', flexDirection: 'column', padding: '10px 12px', boxSizing: 'border-box' },
       },
         h(HeaderBar),
-        h('div', {
-          style: {
-            fontSize: 12, color: C.faint, margin: '2px 0 10px', lineHeight: 1.6,
-          },
-        }, tip),
-
         h('iframe', {
-          ref: frame,
           src: '/api-dsh-pick/panel',
           title: 'dsh-pick',
           style: {
             width: '100%',
-            height: fill ? 'auto' : frameH + 'px',
-            flex: fill ? '1 1 0' : undefined,
-            minHeight: fill ? 0 : undefined,
+            flex: '1 1 0',
+            minHeight: 0,
             border: '1px solid ' + C.border,
             borderRadius: '10px',
             background: 'transparent',
             display: 'block',
           },
         }),
+      )
+    }
 
-        h('div', {
-          style: { fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.7, display: fill ? 'none' : undefined },
-        },
-          L(
-            '排名按周下载；日常基线已扣掉版本发布日与次日的拉取虚高，比原始下载量更接近真实使用量。' +
-            '下载量含 CI / 镜像 / 爬虫流量，不等于用户数。',
-            'Ranks are weekly downloads; daily baseline strips the publish-day spike. ' +
-            'Download counts include CI/mirror traffic, not real users.'),
+    // 数据口径说明：面板底部原来那段，现在放在设置页
+    const DATA_NOTE = () => L(
+      '排名按周下载；日常基线已扣掉版本发布日与次日的拉取虚高，比原始下载量更接近真实使用量。' +
+      '下载量含 CI / 镜像 / 爬虫流量，不等于用户数。npm 统计约滞后 5 天。',
+      'Ranks are weekly downloads; daily baseline strips the publish-day spike and is closer to real use. ' +
+      'Download counts include CI/mirror/crawler traffic, not real users. npm stats lag about 5 days.')
+
+    /** 右侧栏的服务（apply 里拿到）；老版本 DSH 没有 */
+    let sidebarRightApi = null
+
+    function Section({ title, children }) {
+      return h('div', { style: { marginTop: 18 } },
+        h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 6 } }, title),
+        h('div', { style: { fontSize: 12.5, color: C.sub, lineHeight: 1.7 } }, children))
+    }
+
+    /** 设置页：完整面板在右侧栏，这里只放管理和说明 */
+    function SettingsSection() {
+      const [meta, setMeta] = useState(null)
+      const [openMsg, setOpenMsg] = useState('')
+
+      useEffect(() => {
+        let alive = true
+        api('meta').then(j => { if (alive) setMeta(j) }).catch(() => {})
+        return () => { alive = false }
+      }, [])
+
+      const openSidebar = () => {
+        try {
+          sidebarRightApi.openTab(SIDEBAR_KIND)
+          setOpenMsg(L('已在右侧栏打开，关闭设置就能看到', 'Opened in the right sidebar; close Settings to see it'))
+        } catch {
+          // 右侧栏是跟着对话走的：没有打开的对话时开不了
+          setOpenMsg(L('先回到一个对话，再从右侧栏打开', 'Go back to a conversation first, then open it from the right sidebar'))
+        }
+      }
+
+      const catalog = !meta
+        ? L('正在读取目录…', 'Loading catalog…')
+        : meta.total
+          ? L(
+              `目录收录 ${meta.total.toLocaleString()} 个插件，其中 ${meta.deepCount} 个有去噪指标；数据截止 ${meta.anchor}。`,
+              `${meta.total.toLocaleString()} plugins in the catalog, ${meta.deepCount} with denoised metrics; data as of ${meta.anchor}.`)
+          : L('目录未生成：在 dsh-pick 目录跑一次 dsh-pick build', 'Catalog not built yet: run `dsh-pick build`')
+
+      return h('div', { style: { color: C.text } },
+        h(HeaderBar),
+
+        h(Section, { title: L('怎么打开', 'How to open') },
+          h('div', null, L(
+            '选插件面板在对话页的右侧栏：打开右侧栏，在引导页里点「选插件」。',
+            'The picker lives in the conversation\'s right sidebar: open the sidebar and choose "Pick a plugin" on its guide page.')),
+          sidebarRightApi
+            ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' } },
+                h(Btn, { onClick: openSidebar }, L('在右侧栏打开', 'Open in right sidebar')),
+                openMsg ? h('span', { style: { fontSize: 12, color: C.faint } }, openMsg) : null)
+            : null,
+        ),
+
+        h(Section, { title: L('数据口径', 'About the data') },
+          h('div', null, catalog),
+          h('div', { style: { marginTop: 4 } }, DATA_NOTE()),
         ),
       )
     }
@@ -221,7 +228,6 @@ window.__ModuleLoader__.load({
     // 右侧栏页签（DSH 0.2 起有右侧栏；老版本没有这个服务就只在设置页里）
     const SIDEBAR_TAB_ID = 'dsh-pick/panel'
     const SIDEBAR_KIND = 'dsh-pick'
-    const SidebarBody = () => h(PickPanel, { fill: true })
 
     function PickIcon({ size = 16 }) {
       return h('svg', { width: size, height: size, viewBox: '0 0 32 32', fill: 'none' },
@@ -232,6 +238,7 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       try {
         ctx.inject && ctx.inject(['sidebarRight', 'sidebarRightTabs'], (scope) => {
+          const right = (scope.get && scope.get('sidebarRight')) || scope.sidebarRight
           const tabs = (scope.get && scope.get('sidebarRightTabs')) || scope.sidebarRightTabs
           if (!tabs || typeof tabs.register !== 'function') return
           const effect = (fn, label) => (scope.effect ? scope.effect(fn, label) : fn())
@@ -250,8 +257,12 @@ window.__ModuleLoader__.load({
             }],
           }), 'dsh-pick: sidebar type')
           const slots = scope.slots || ctx.slots
-          const body = () => slots.register({ name: 'sidebar.right.pane.tab', key: SIDEBAR_TAB_ID }, SidebarBody)
+          const body = () => slots.register({ name: 'sidebar.right.pane.tab', key: SIDEBAR_TAB_ID }, PickPanel)
           effect(() => (slots.inject ? slots.inject('sidebar.right.pane.tab', body) : body()), 'dsh-pick: sidebar body')
+          if (right && typeof right.openTab === 'function') {
+            sidebarRightApi = right
+            effect(() => () => { if (sidebarRightApi === right) sidebarRightApi = null }, 'dsh-pick: sidebar api')
+          }
         })
       } catch (error) {
         console.warn('[dsh-pick] 右侧栏注册失败', error)
@@ -260,7 +271,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('settings.section', () =>
           ctx.slots.register(
             { name: 'settings.section', id: 'dsh-pick', order: 30, label: () => 'dsh-pick' },
-            PickPanel,
+            SettingsSection,
           ))
       } catch (error) {
         console.warn('[dsh-pick] 设置页注册失败', error)
