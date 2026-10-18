@@ -54,6 +54,13 @@ async function boot() {
   renderRank()
   renderWatch()
   bindEvents()
+
+  // 支持 ?q=需求 直接带上搜索结果，方便分享「结论链接」
+  const q = new URLSearchParams(location.search).get('q')
+  if (q) {
+    $('#need').value = q
+    doSearch()
+  }
 }
 
 function bindEvents() {
