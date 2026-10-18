@@ -32,10 +32,28 @@ npm 官网和各类 stat 站能看数字，但看数字回答不了「我该装�
 
 ## 用法
 
+### 作为 DSH 插件（推荐）
+
+```sh
+dsh plugin --profile web add dsh-pick
+```
+
+装完重启 `dsh web`，打开 **设置 → dsh-pick**，就是完整的选插件面板。
+
+首次使用要先生成目录（在 dsh-pick 的安装目录下，或任意目录）：
+
+```sh
+npx dsh-pick build --deep 332
+```
+
+不跑也行——面板会提示「目录未生成」，排行榜和搜索会空着，但界面照常打开。
+
+### 作为命令行 / 独立网页
+
 ```sh
 npm i -g dsh-pick      # 或 npx dsh-pick
 
-dsh-pick build --deep 180          # 抓目录 + 算去噪指标
+dsh-pick build --deep 332          # 抓目录 + 算去噪指标
 dsh-pick serve --port 8891         # 起本地服务，打开面板
 ```
 
@@ -69,15 +87,22 @@ dsh-pick/
 ├── package.json
 ├── bin/dsh-pick.js     CLI 入口
 ├── lib/
-│   ├── engine.js       数据引擎：抓目录、算指标、查询（一个引擎，三个入口）
+│   ├── engine.js       数据引擎：抓目录、算指标、查询（一个引擎，多个入口）
 │   ├── classify.js     13 类 + 其他，关键词加权分类
 │   ├── metrics.js      去噪指标：基线 / 增速 / 节奏 / 新鲜度 / 健康度
-│   └── words.js        需求 → 搜索词（同义词 + 中文二元切分），CLI 与面板共用
-├── data/catalog.json   目录产物（2250 个包，其中 332 个带去噪指标）
+│   ├── words.js        需求 → 搜索词（同义词 + 中文二元切分），CLI 与面板共用
+│   └── normalize.js    （在 engine.js 内）排名与链接字段
+├── data/catalog.json   目录产物
+├── plugin/
+│   ├── index.js        DSH 宿主端：挂 /api-dsh-pick/* 路由
+│   ├── client.js       设置页面板（iframe 复用 web/panel.html）
+│   └── cordis.patch.yml 插进「设置 → dsh-pick」
 └── web/
-    ├── panel.html      选插件面板
+    ├── panel.html      选插件面板（独立调试用，也是插件内嵌的同一份）
     └── panel.js        面板逻辑
 ```
+
+面板只有一份代码，两种宿主都认：独立 `dsh-pick serve` 走根路径，插件内嵌走 `/api-dsh-pick` 前缀（`panel.html` 顶部的小加载器自动判断）。
 
 ---
 

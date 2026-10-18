@@ -1,0 +1,4 @@
+# dsh-pick 的 dsh 插件：在「设置」里加一个 dsh-pick 分区（插件选型助手）
+- insert:
+    - id: dsh-pick
+      name: dsh-pick

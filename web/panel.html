@@ -55,6 +55,15 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 .btn:disabled{opacity:.5;cursor:default}
 .cand .ok{font-size:9.5px;background:var(--ok-bg);color:#0b7a45;border-radius:20px;padding:1px 6px;font-weight:700;flex:none}
 .cand .nook{font-size:9.5px;background:#f0f2f5;color:var(--t3);border-radius:20px;padding:1px 6px;flex:none}
+.cand .rk{font-size:10.5px;color:var(--t3);margin:-2px 0 5px;font-variant-numeric:tabular-nums}
+.cand .rk b{color:var(--t2);font-weight:700}
+.cand .d{font-size:11.5px;color:var(--t2);margin:5px 0 8px;line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.links{display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line)}
+.lk{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--t2);text-decoration:none;
+  border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:#fff;transition:.15s}
+.lk:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.lk svg{flex:none}
 .examples{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
 .examples span{font-size:11.5px;color:var(--t3);align-self:center}
 .chip{background:var(--soft);color:var(--t2);border:1px solid transparent;border-radius:20px;
@@ -126,9 +135,12 @@ td.down{color:var(--bad);font-weight:600}
 .catpill{font-size:10.5px;background:var(--soft);color:var(--t2);border-radius:20px;padding:2px 8px;white-space:nowrap}
 
 /* ---------- 监控 ---------- */
-.mon{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--soft)}
+.mon{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--soft);flex-wrap:wrap}
 .mon:last-child{border-bottom:none}
-.mon .nm{font-size:13px;font-weight:650;flex:1}
+.mon .nm{font-size:13px;font-weight:650;flex:1;min-width:150px}
+.mon .mrank{font-size:10.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+.mon .mrank b{color:var(--t2);font-weight:700}
+.mon .mlinks{display:flex;gap:5px}
 .mon .x{appearance:none;border:none;background:none;color:var(--t3);cursor:pointer;font-size:16px;padding:0 4px}
 .mon .x:hover{color:var(--bad)}
 
@@ -223,7 +235,7 @@ td.down{color:var(--bad);font-weight:600}
           <thead><tr>
             <th style="width:44px">#</th><th>插件</th><th>分类</th>
             <th class="r">基线</th><th class="r">周下载</th><th class="r">环比</th>
-            <th class="r">版本节奏</th><th class="r">最近更新</th>
+            <th class="r">版本节奏</th><th class="r">最近更新</th><th>链接</th>
           </tr></thead>
           <tbody id="rankBody"></tbody>
         </table>
@@ -248,6 +260,13 @@ td.down{color:var(--bad);font-weight:600}
   <div class="foot" id="foot"></div>
 </div>
 
-<script type="module" src="/web/panel.js"></script>
+<script type="module">
+  // 同一个面板两种宿主：独立预览加载 /web/panel.js，插件内嵌加载 /api-dsh-pick/panel.js
+  const inPlugin = location.pathname.indexOf('/api-dsh-pick') === 0
+  import(inPlugin ? '/api-dsh-pick/panel.js' : '/web/panel.js').catch(e => {
+    document.body.insertAdjacentHTML('beforeend',
+      '<pre style="color:#c00;padding:20px">面板加载失败：' + e.message + '</pre>')
+  })
+</script>
 </body>
 </html>

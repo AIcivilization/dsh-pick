@@ -1,5 +1,13 @@
 /* dsh-pick 面板逻辑 —— 选插件四步：说需求 → 找候选 → 多维比较 → 出结论 */
-import { expandWords } from '/lib/words.js'
+
+// 两种宿主的资源路径不同，这里集中定义，别的地方只认这两个键
+//   dsh-pick serve（独立预览）→ /lib/words.js、/data/catalog.json
+//   DSH 插件内嵌 iframe       → /api-dsh-pick/words.js、/api-dsh-pick/catalog.json
+const IS_PLUGIN = location.pathname.indexOf('/api-dsh-pick') === 0
+const P = {
+  words: IS_PLUGIN ? '/api-dsh-pick/words.js' : '/lib/words.js',
+  catalog: IS_PLUGIN ? '/api-dsh-pick/catalog.json' : '/data/catalog.json',
+}
 
 const $ = s => document.querySelector(s)
 let CAT = null
@@ -14,7 +22,29 @@ const num = n => (n === null || n === undefined) ? '—' : Number(n).toLocaleStr
 const pct = n => (n === null || n === undefined) ? '—' : (n >= 0 ? '+' : '') + Math.round(n * 100) + '%'
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
+/* ---------------- 排名文案与外链按钮 ---------------- */
+function rankText(rec) {
+  if (!rec.rank) return ''
+  const total = `总榜 #<b>${num(rec.rank)}</b>`
+  const cat = rec.crank ? ` · ${esc(rec.cat)} #<b>${num(rec.crank)}</b>` : ''
+  return total + cat
+}
+
+const GH_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.99 7.99 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>'
+const NPM_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 0h16v16H0V0zm3.2 12.8V3.2h2.4v9.6H3.2zm3.6 0V3.2h5.6v6.4H8.8v3.2H6.8zM8.8 6.4v3.2h1.6V6.4H8.8z"/></svg>'
+
+function linkBtns(rec) {
+  let h = ''
+  if (rec.ghUrl) {
+    h += `<a class="lk" href="${esc(rec.ghUrl)}" target="_blank" rel="noopener" title="GitHub：${esc(rec.ghUrl)}">${GH_SVG}GitHub</a>`
+  }
+  h += `<a class="lk" href="${esc(rec.npmUrl || ('https://www.npmjs.com/package/' + rec.n))}" target="_blank" rel="noopener" title="npm：${esc(rec.npmUrl || rec.n)}">${NPM_SVG}npm</a>`
+  return h || '<span style="font-size:11px;color:var(--t3)">无外链</span>'
+}
+
 /* ---------------- 搜索（与 lib/engine.js 共用同一份词典 lib/words.js） --------------- */
+const { expandWords } = await import(P.words)
+
 function searchByNeed(need, limit = 10) {
   const terms = expandWords(need)
   if (!terms.length || !CAT) return []
@@ -36,7 +66,7 @@ function searchByNeed(need, limit = 10) {
 
 /* ---------------- 启动 ---------------- */
 async function boot() {
-  const res = await fetch('data/catalog.json', { cache: 'no-store' })
+  const res = await fetch(P.catalog, { cache: 'no-store' })
   if (!res.ok) { $('#meta').textContent = '目录缺失，先跑 dsh-pick build'; return }
   CAT = await res.json()
 
@@ -121,12 +151,14 @@ function renderCands(need) {
         `<span class="rel">${esc(rec.cat)}</span>` +
         (d ? '<span class="ok" title="有去噪指标，可参与健康度比较">✓ 可比较</span>' : '<span class="nook" title="未进入去噪范围（周下载 Top 之外），缺基线/环比/节奏">仅基础</span>') +
         `</div>` +
+        `<div class="rk">${rankText(rec)}</div>` +
         `<div class="d">${esc(rec.d)}</div>` +
         `<div class="kv">` +
           `<span>周 <b>${num(rec.w)}</b></span>` +
           `<span>月 <b>${num(rec.m)}</b></span>` +
           (d ? `<span>基线 <b>${num(d.base)}</b></span><span>环比 <b>${pct(d.growth)}</b></span>` : '') +
         `</div>` +
+        `<div class="links">${linkBtns(rec)}</div>` +
       `</div>`
     el.addEventListener('click', () => togglePick(rec.n))
     host.appendChild(el)
@@ -290,6 +322,7 @@ function renderRank() {
       `<td class="r ${g === null ? '' : (g >= 0 ? 'up' : 'down')}">${pct(g)}</td>` +
       `<td class="r">${d && d.cadence !== null ? d.cadence + ' 天' : '—'}</td>` +
       `<td class="r">${d ? d.age + ' 天前' : '—'}</td>` +
+      `<td style="white-space:nowrap">${linkBtns(r)}</td>` +
       `</tr>`
   }).join('')
 }
@@ -324,9 +357,11 @@ function renderWatch() {
     const d = r.deep
     return `<div class="mon">` +
       `<span class="nm">${esc(n)}</span>` +
+      `<span class="mrank">${rankText(r)}</span>` +
       `<span style="font-size:11.5px;color:var(--t3)">${esc(r.cat)}</span>` +
       `<span style="font-size:12px"><b>${num(r.w)}</b>/周</span>` +
       `<span style="font-size:12px;color:var(--t2)">基线 ${d ? num(d.base) : '—'}</span>` +
+      `<span class="mlinks">${linkBtns(r)}</span>` +
       `<button class="x" data-rm="${esc(n)}">×</button></div>`
   }).join('')
 
@@ -339,7 +374,7 @@ function renderWatch() {
   $('#watchChart').innerHTML = rows.map((r, i) => {
     const w = Math.max(Math.log10(r.w + 1) / Math.log10(max + 1) * 100, 1.5)
     return `<div class="hrow" style="display:grid;grid-template-columns:210px 1fr 78px;align-items:center;gap:12px;padding:6px 0">` +
-      `<div style="font-size:12px;color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(i)};margin-right:6px"></i>${esc(r.n)}</div>` +
+      `<div style="font-size:12px;color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(i)};margin-right:6px"></i>${esc(r.n)} <span style="color:var(--t3);font-size:10px">#${num(r.rank)}</span></div>` +
       `<div style="height:14px;background:#f1f3f6;border-radius:4px"><div style="height:100%;width:${w}%;background:${colorOf(i)};border-radius:4px"></div></div>` +
       `<div style="font-size:12px;font-weight:650;text-align:right">${num(r.w)}</div></div>`
   }).join('')

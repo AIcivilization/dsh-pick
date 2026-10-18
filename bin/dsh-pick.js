@@ -11,7 +11,7 @@ import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildCatalog, loadCatalog, searchByNeed, rank, stats } from '../lib/engine.js'
+import { buildCatalog, loadCatalog, searchByNeed, rank, stats, normalize } from '../lib/engine.js'
 
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const [, , cmd = 'help', ...rest] = process.argv
@@ -119,7 +119,13 @@ async function main() {
           if (p === '/') p = '/web/panel.html'
           const prefix = Object.keys(ROOTS).find(k => p.startsWith(k))
           if (!prefix) { res.writeHead(403).end('forbidden'); return }
-          const buf = await readFile(join(ROOTS[prefix], p.slice(prefix.length)))
+          let buf
+          if (prefix === '/data/') {
+            // 目录要走一遍归一化，补上排名与链接字段
+            buf = Buffer.from(JSON.stringify(await loadCatalog()), 'utf8')
+          } else {
+            buf = await readFile(join(ROOTS[prefix], p.slice(prefix.length)))
+          }
           res.writeHead(200, {
             'content-type': (types[extName(p)] || 'text/plain') + '; charset=utf-8',
             'cache-control': 'no-store',
