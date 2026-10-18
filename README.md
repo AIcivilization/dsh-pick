@@ -138,6 +138,40 @@ dsh-pick/
 
 ---
 
+## 发布流程（每次发版照这个走，一步都别省）
+
+```sh
+cd /Users/wf/dsh/dsh-pick
+
+# 1. 改 package.json 里的 version（npm 不许覆盖已发布版本）
+# 2. 提交并推 GitHub —— 代码是真源，必须早于 npm
+git add -A && git commit -m "vX.Y.Z：改了什么"
+git push origin main
+
+# 3. 打 tag 并推送（必须，用来对应 npm 版本）
+git tag -a vX.Y.Z -m "dsh-pick vX.Y.Z：改了什么"
+git push origin vX.Y.Z
+
+# 4. 发布 npm（会问 OTP）
+npm publish
+
+# 5. 验证
+npm view dsh-pick version                                    # 应等于 X.Y.Z
+```
+
+**顺序不能反**：先 GitHub 再 npm，这样 npm 上每个版本都能在 git 里找到对应提交。
+
+`package.json` 里的 `dsh.bundle` 声明**不能删**，否则 `dsh plugin add` 会直接拒绝安装：
+
+```json
+"dsh": {
+  "bundle": { "patch": "./plugin/cordis.patch.yml" },
+  "client": { "platform": "web" }
+}
+```
+
+---
+
 ## 许可
 
 MIT
