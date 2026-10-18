@@ -42,6 +42,21 @@ dsh plugin --profile web add dsh-pick
 **设置 → dsh-pick** 是精简页：版本 / 更新 / 卸载、怎么打开面板、数据口径。
 面板顶部一行：插件名、当前版本号、更新按钮，最右侧是卸载按钮——更新和卸载都交给 DSH 自己的插件管理器，完成后重启 DSH 生效。
 
+**和对话联动**（这是插件版比独立网页好用的地方）：
+
+- **+AI**：候选卡片、「候选」「结论」「我的监控」的标题上都有。点一下，把这块的需求和关键数字整理成一段话发到当前对话，AI 在对话里结合你的场景分析。只发结论和数字，不发原始数据；输入框里有你没发出的文字时不会覆盖。
+- **在对话里直接问**：插件给 AI 注册了 4 个工具，不开面板也行，直接问「我想装个数据库插件，哪个靠谱？」，AI 会自己查目录、比较。
+
+  | 工具 | 作用 |
+  |---|---|
+  | `pick_search` | 按需求找候选 |
+  | `pick_stats` | 查几个插件的详细数据（目录里没有去噪指标的实时查 npm） |
+  | `pick_compare` | 2~6 个插件逐项对比，标出每项最好的 |
+  | `pick_rank` | 全部或某一类的排行 |
+
+  每个工具的结果都带口径说明，并要求 AI 只引用工具给的数字，不自己推算。
+- **安装**：候选卡片上点「安装 → 确认安装」，交给 DSH 的插件管理器装；已装的显示「✓ 已安装」。只能装目录里有的插件（带 `dsh-plugin` 关键字的 npm 包）。
+
 首次使用要先生成目录（在 dsh-pick 的安装目录下，或任意目录）：
 
 ```sh
@@ -96,8 +111,9 @@ dsh-pick/
 │   └── normalize.js    （在 engine.js 内）排名与链接字段
 ├── data/catalog.json   目录产物
 ├── plugin/
-│   ├── index.js        DSH 宿主端：挂 /api-dsh-pick/* 路由
-│   ├── client.js       右侧栏页签（iframe 复用 web/panel.html）+ 设置页精简版
+│   ├── index.js        DSH 宿主端：挂 /api-dsh-pick/* 路由（面板、更新、卸载、安装）
+│   ├── tools.js        给对话里的 AI 用的 4 个工具（pick_search / stats / compare / rank）
+│   ├── client.js       右侧栏页签（iframe 复用 web/panel.html，转发「+AI」到对话）+ 设置页精简版
 │   └── cordis.patch.yml 插进 DSH
 └── web/
     ├── panel.html      选插件面板（独立调试用，也是插件内嵌的同一份）
@@ -129,11 +145,13 @@ dsh-pick/
 - 选插件四步流程 + 规则版结论
 - 结论导出为独立网页
 - 我的监控（localStorage）
+- DSH 插件形态：右侧栏完整面板 + 设置页精简版，跟随 DSH 明暗主题；面板内更新 / 卸载本插件
+- 「+AI」把面板内容发到对话；面板内一键安装插件
+- 4 个 AI 工具：`pick_search` / `pick_stats` / `pick_compare` / `pick_rank`（口径随结果附上，禁止 AI 自己推算数字）
 
-**待做（见方案文档）**
-- DSH 插件形态：托管端 `plugin/index.js` + `plugin/client.js` + `cordis.patch.yml`
-- 5 + 2 个 AI 工具：`pick_ranking` / `pick_search` / `pick_stats` / `pick_compare` / `pick_trend` / `pick_recommend` / `pick_export`
-- skill `plugin-analyst`（意图路由 + 口径说明 + 禁止 AI 自己推算数字）
+**待做**
+- 更多 AI 工具：`pick_trend`（走势）/ `pick_export`（导出结论）
+- skill `plugin-analyst`（意图路由 + 更完整的口径说明）
 - AI 语义分类，把「其他」从 29% 压到 10% 以内
 - 周报（可指定方向）
 - PDF 导出（DSH Desktop 可用 Electron `printToPDF`）

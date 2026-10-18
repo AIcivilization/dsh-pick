@@ -15,7 +15,7 @@ window.__ModuleLoader__.load({
     const module = { exports: {} }
     const React = require('react')
     const h = React.createElement
-    const { useEffect, useState } = React
+    const { useEffect, useRef, useState } = React
 
     // 语言：跟着页面（dsh 只有中、英两种）
     const isZh = () => {
@@ -137,13 +137,70 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // —— 「+AI」：面板（iframe）里点了，消息传到这里，写进这个对话的输入框发出去 ——
+    // 拿输入框的办法照 dsh-vps-manager：sessions 服务 → 这个对话的 conversation.input
+    let composerOf = null
+    function composerFor(sessionId) {
+      try { return (sessionId && composerOf && composerOf(sessionId)) || null } catch { return null }
+    }
+    /** 输入框里还没发出去的文字 */
+    function composerDraft(input) {
+      try {
+        const st = input.snapshot || (input.state && input.state.get && input.state.get()) || {}
+        return String(st.draft || '').trim()
+      } catch { return '' }
+    }
+    /** 这个对话里排着队、还没轮到的消息（只取文字） */
+    function queuedTexts(input) {
+      try {
+        const st = input.snapshot || (input.state && input.state.get && input.state.get()) || {}
+        return (st.queue || []).map(m => (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim())
+      } catch { return [] }
+    }
+    /** @returns {'sent'|'queued'|'draft'|'none'} */
+    async function sendToChat(sessionId, text) {
+      const input = composerFor(sessionId)
+      if (!input) return 'none'
+      // 用户正在输入的内容不覆盖
+      if (composerDraft(input)) return 'draft'
+      // AI 忙着时连点几下，别排一串一样的
+      if (queuedTexts(input).includes(text.trim())) return 'queued'
+      input.setDraft(text)
+      // 输入框更新是异步的：等它收到这句话再发，不然发出去的是空的
+      for (let i = 0; i < 20 && !composerDraft(input); i += 1) await new Promise(r => setTimeout(r, 25))
+      if (!composerDraft(input)) {
+        if (input.focus) input.focus()
+        return 'none'
+      }
+      await input.submit('queue')
+      return 'sent'
+    }
+
     /** 右侧栏里的完整面板：标题行 + 占满栏高的 iframe（iframe 自己滚动；目录信息面板里自带） */
-    function PickPanel() {
+    function PickPanel({ sessionId }) {
+      const frame = useRef(null)
+      const sid = sessionId ? String(sessionId) : ''
+
+      useEffect(() => {
+        const onMessage = async (e) => {
+          const win = frame.current && frame.current.contentWindow
+          if (!win || e.source !== win || e.origin !== window.location.origin) return
+          const d = e.data
+          if (!d || d.type !== 'dsh-pick:ask' || typeof d.text !== 'string' || !d.text.trim()) return
+          let status = 'none'
+          try { status = await sendToChat(sid, d.text.slice(0, 8000)) } catch { status = 'none' }
+          win.postMessage({ type: 'dsh-pick:ask-result', id: d.id, status }, window.location.origin)
+        }
+        window.addEventListener('message', onMessage)
+        return () => window.removeEventListener('message', onMessage)
+      }, [sid])
+
       return h('div', {
         style: { color: C.text, height: '100%', display: 'flex', flexDirection: 'column', padding: '10px 12px', boxSizing: 'border-box' },
       },
         h(HeaderBar),
         h('iframe', {
+          ref: frame,
           src: '/api-dsh-pick/panel',
           title: 'dsh-pick',
           style: {
@@ -237,6 +294,22 @@ window.__ModuleLoader__.load({
     const injectSlots = ['slots']
     function apply(ctx) {
       try {
+        // 对话输入框（可选服务：没有就是「+AI」发不出去，面板照常能用）
+        ctx.inject && ctx.inject(['sessions', 'conversation'], (scope) => {
+          const sessions = (scope.get && scope.get('sessions')) || scope.sessions
+          const reader = (sessionId) => {
+            const actx = sessions && sessions.scope && sessions.scope(sessionId)
+            const conv = actx && actx.get && actx.get('conversation')
+            const input = conv && conv.input && conv.input.for && conv.input.for(actx)
+            return input && typeof input.setDraft === 'function' && typeof input.submit === 'function' ? input : null
+          }
+          composerOf = reader
+          if (scope.effect) scope.effect(() => () => { if (composerOf === reader) composerOf = null }, 'dsh-pick: composer')
+        })
+      } catch (error) {
+        console.warn('[dsh-pick] 拿不到对话输入框', error)
+      }
+      try {
         ctx.inject && ctx.inject(['sidebarRight', 'sidebarRightTabs'], (scope) => {
           const right = (scope.get && scope.get('sidebarRight')) || scope.sidebarRight
           const tabs = (scope.get && scope.get('sidebarRightTabs')) || scope.sidebarRightTabs
@@ -278,7 +351,8 @@ window.__ModuleLoader__.load({
       }
     }
 
-    module.exports = { name: 'dsh-pick', inject: injectSlots, apply }
+    // 给测试用的内部句柄（浏览器里没人碰它）
+    module.exports = { name: 'dsh-pick', inject: injectSlots, apply, __test: { sendToChat } }
     return module.exports
   },
 })

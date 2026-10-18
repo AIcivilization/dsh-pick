@@ -12,12 +12,17 @@
 //   GET  /api-dsh-pick/update       本插件版本 + npm 上的最新版本
 //   POST /api-dsh-pick/update       更新到 npm 最新版（交给 DSH 的插件管理器）
 //   POST /api-dsh-pick/uninstall    从 DSH 卸载本插件
+//   GET  /api-dsh-pick/installed    DSH 里已装的插件名（面板的「已安装」标记）
+//   POST /api-dsh-pick/install      安装目录里的某个插件 { name }
+//
+// 另外注册 4 个 AI 工具（plugin/tools.js）：对话里的 AI 能自己查目录、比较插件。
 //
 // 写法照 dsh-model（同机参考）与 dsh-vps-manager（同作者）的 plugin/index.js。
 
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
+import { registerTools } from './tools.js'
 
 /** 本包根目录：插件就是完整的 dsh-pick 包 */
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -98,6 +103,35 @@ function managerError(result) {
   return detail ? `${code}：${detail}` : code
 }
 
+/** 读请求体里的 JSON（最多 16 KB，这里只收很小的参数） */
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let size = 0
+    const chunks = []
+    req.on('data', (c) => {
+      size += c.length
+      if (size > 16 * 1024) { req.destroy(); resolve({}) } else chunks.push(c)
+    })
+    req.on('end', () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')) } catch { resolve({}) }
+    })
+    req.on('error', () => resolve({}))
+  })
+}
+
+/** DSH 插件管理器清单里已装、已启用的插件名；拿不到就是 null（老版本 DSH） */
+function installedNames(pluginManager) {
+  try {
+    const list = pluginManager && typeof pluginManager.listBundles === 'function' ? pluginManager.listBundles() : null
+    if (!Array.isArray(list)) return null
+    return new Set(list.filter(b => b && b.name && b.installed !== false).map(b => b.name))
+  } catch {
+    return null
+  }
+}
+
+const NAME_RE = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i
+
 function sendJson(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
   res.end(JSON.stringify(body))
@@ -153,6 +187,14 @@ export function apply(ctx) {
   try {
     profile = ctx.get && ctx.get('profileContext') && ctx.get('profileContext').name
   } catch { profile = undefined }
+
+  // AI 工具：DSH 有 tools 服务才注册（可选依赖，没有也不影响面板）
+  ctx.inject(['tools'], (toolsCtx) => {
+    const tools = toolsCtx.tools || (toolsCtx.get && toolsCtx.get('tools'))
+    if (!tools || typeof tools.register !== 'function') return
+    registerTools({ tools }, { installed: () => installedNames(pluginManager) || new Set() })
+      .catch(e => console.warn('[dsh-pick] AI 工具注册失败', e))
+  })
 
   ctx.inject(['webServer'], (webCtx) => {
     const ws = webCtx.webServer
@@ -249,6 +291,49 @@ export function apply(ctx) {
           return sendJson(res, 200, { ok: true })
         } catch (e) {
           return sendJson(res, 200, { ok: false, message: `卸载失败：${e.message}`, command })
+        }
+      },
+    }))
+
+    // 已装的插件（面板卡片上的「已安装」）
+    track(ws.register({
+      kind: 'exact',
+      path: '/api-dsh-pick/installed',
+      handler: async (req, res) => {
+        const names = installedNames(pluginManager)
+        sendJson(res, 200, {
+          known: Boolean(names),
+          names: names ? [...names] : [],
+          canInstall: Boolean(pluginManager && typeof pluginManager.installBundle === 'function'),
+        })
+      },
+    }))
+
+    // 安装目录里的插件：只装目录里有的（都是带 dsh-plugin 关键字的 npm 包），不接受任意包名
+    track(ws.register({
+      kind: 'exact',
+      path: '/api-dsh-pick/install',
+      handler: async (req, res) => {
+        if (!isSafePost(req)) return sendJson(res, 403, { ok: false, message: '只接受本页面发出的请求' })
+        const { name } = await readJsonBody(req)
+        if (typeof name !== 'string' || !NAME_RE.test(name)) return sendJson(res, 400, { ok: false, message: '包名不对' })
+        let inCatalog = false
+        try {
+          const cat = JSON.parse(await readFile(join(PKG_ROOT, 'data', 'catalog.json'), 'utf8'))
+          inCatalog = Boolean(cat.packages && cat.packages[name])
+        } catch { /* 目录读不到就当不在 */ }
+        if (!inCatalog) return sendJson(res, 400, { ok: false, message: `${name} 不在 DSH 插件目录里，这里不装` })
+        const command = pluginCommand(`add ${name}`, profile)
+        if (!pluginManager || typeof pluginManager.installBundle !== 'function') {
+          return sendJson(res, 200, { ok: false, message: '这个版本的 DSH 不能在这里装插件，请在终端执行命令', command })
+        }
+        try {
+          const result = await pluginManager.installBundle(name, { enabled: true })
+          const err = managerError(result)
+          if (err) return sendJson(res, 200, { ok: false, message: `安装失败（${err}）`, command })
+          return sendJson(res, 200, { ok: true, restart: result && result.application === 'restart-required' })
+        } catch (e) {
+          return sendJson(res, 200, { ok: false, message: `安装失败：${e.message}`, command })
         }
       },
     }))

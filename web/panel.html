@@ -17,6 +17,7 @@
   --bar-bg:rgba(245,246,248,.92); --shadow:rgba(16,24,40,.09); --focus:rgba(47,107,255,.12);
   --ok-text:#0b7a45; --warn-text:#a8620a; --bad-text:#a52f2f;
   --ok-line:#bfe6d1; --warn-line:#f2ddb6; --bad-line:#f2cccc;
+  --ai:#7c4dff;
   color-scheme:light;
 }
 /* 暗色：嵌在 DSH 里时由下面的脚本按 DSH 主题设 data-theme（并把 DSH 的颜色变量覆盖上来）；
@@ -32,6 +33,7 @@
   --bar-bg:rgba(23,24,28,.9); --shadow:rgba(0,0,0,.4); --focus:rgba(91,140,255,.25);
   --ok-text:#5fd99a; --warn-text:#f3b65e; --bad-text:#f58a8a;
   --ok-line:rgba(60,207,127,.3); --warn-line:rgba(240,164,58,.3); --bad-line:rgba(240,107,107,.3);
+  --ai:#a98bff;
   color-scheme:dark;
 }
 @media (prefers-color-scheme: dark){
@@ -46,6 +48,7 @@
     --bar-bg:rgba(23,24,28,.9); --shadow:rgba(0,0,0,.4); --focus:rgba(91,140,255,.25);
     --ok-text:#5fd99a; --warn-text:#f3b65e; --bad-text:#f58a8a;
     --ok-line:rgba(60,207,127,.3); --warn-line:rgba(240,164,58,.3); --bad-line:rgba(240,107,107,.3);
+    --ai:#a98bff;
     color-scheme:dark;
   }
 }
@@ -94,7 +97,27 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 .cand .rk b{color:var(--t2);font-weight:700}
 .cand .d{font-size:11.5px;color:var(--t2);margin:5px 0 8px;line-height:1.5;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.links{display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line)}
+.links{display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);align-items:center;flex-wrap:wrap}
+.links .sp{flex:1}
+/* 「+AI」：把这块内容发到 DSH 对话里，AI 在对话里回答（样式照 dsh-vps-manager 卡片上的那颗） */
+.ai{appearance:none;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:10px;cursor:pointer;
+  font-family:inherit;font-size:10.5px;font-weight:650;letter-spacing:.2px;line-height:1;white-space:nowrap;color:var(--ai);
+  border:.5px solid color-mix(in srgb,var(--ai) 40%,transparent);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,transparent),color-mix(in srgb,var(--ai) 18%,transparent))}
+.ai:hover{border-color:color-mix(in srgb,var(--ai) 62%,transparent);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--ai) 28%,transparent))}
+.section h2 .ai{margin-left:auto;font-weight:650}
+.inst{appearance:none;font-family:inherit;font-size:10.5px;font-weight:600;border-radius:6px;padding:2px 9px;cursor:pointer;
+  border:1px solid var(--accent);background:var(--panel);color:var(--accent);white-space:nowrap}
+.inst:hover{background:var(--accent-bg)}
+.inst.confirm{background:var(--accent);color:#fff}
+.inst:disabled{opacity:.6;cursor:default}
+.badge-in{font-size:10.5px;color:var(--ok-text);background:var(--ok-bg);border-radius:6px;padding:2px 8px;white-space:nowrap}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:90;max-width:calc(100% - 24px);
+  background:var(--text);color:var(--bg);font-size:12px;line-height:1.6;padding:8px 14px;border-radius:9px;
+  box-shadow:0 4px 16px var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1;pointer-events:auto}
+.toast code{display:block;margin-top:4px;user-select:all;font-size:11px;opacity:.85}
 .lk{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--t2);text-decoration:none;
   border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--panel);transition:.15s}
 .lk:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -280,7 +303,7 @@ td.down{color:var(--bad);font-weight:600}
     </div>
 
     <div class="section hidden" id="secCand">
-      <h2><span class="n">2</span>候选 <span style="font-size:11.5px;color:var(--t3);font-weight:500" id="candCount"></span></h2>
+      <h2><span class="n">2</span>候选 <span style="font-size:11.5px;color:var(--t3);font-weight:500" id="candCount"></span><button class="ai hidden" id="aiCands" title="把这批候选发到对话里，让 AI 帮你挑">+AI 帮我挑</button></h2>
       <p class="cap">点选 2~6 个进行比较。排序按「相关性 × 下载量」，下载量只做微弱加权，避免发版本最勤的挤掉真正相关的。</p>
       <div class="cands" id="cands"></div>
     </div>
@@ -295,8 +318,8 @@ td.down{color:var(--bad);font-weight:600}
     </div>
 
     <div class="section hidden" id="secVerdict">
-      <h2><span class="n">4</span>结论</h2>
-      <p class="cap">以下判断由本地规则给出，依据就是上面这张表里的数字。装上 DSH 插件版后，这一步由 AI 生成，能结合你的具体场景解释取舍。</p>
+      <h2><span class="n">4</span>结论<button class="ai hidden" id="aiVerdict" title="把对比表和规则结论发到对话里，让 AI 结合你的场景判断">+AI 帮我判断</button></h2>
+      <p class="cap" id="verdictCap">以下判断由本地规则给出，依据就是上面这张表里的数字。装上 DSH 插件版后，可以一键交给 AI，结合你的具体场景解释取舍。</p>
       <div id="verdicts"></div>
       <div style="display:flex;gap:9px;margin-top:14px;flex-wrap:wrap">
         <button class="btn ghost" id="btnExport">导出结论（网页）</button>
@@ -330,7 +353,7 @@ td.down{color:var(--bad);font-weight:600}
   <!-- ============ Tab 2：监控 ============ -->
   <div id="tab-watch" class="hidden">
     <div class="section">
-      <h2>我的监控</h2>
+      <h2>我的监控<button class="ai hidden" id="aiWatch" title="把监控列表发到对话里，让 AI 看看谁在涨、谁停更了">+AI 看看近况</button></h2>
       <p class="cap">存在浏览器本地（localStorage），不上传。数据取自目录，目录每天重建一次。</p>
       <div id="watchList"></div>
     </div>
@@ -343,6 +366,7 @@ td.down{color:var(--bad);font-weight:600}
 
   <div class="foot" id="foot"></div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script type="module">
   // 同一个面板两种宿主：独立预览加载 /web/panel.js，插件内嵌加载 /api-dsh-pick/panel.js

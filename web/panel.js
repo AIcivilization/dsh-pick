@@ -9,6 +9,11 @@ const P = {
   catalog: IS_PLUGIN ? '/api-dsh-pick/catalog.json' : '/data/catalog.json',
 }
 
+// 嵌在 DSH 里（同源 iframe）才有「+AI」和「安装」：消息交给外层（plugin/client.js）写进当前对话；
+// 独立打开（dsh-pick serve）时外面没有 DSH，这两样都不显示
+let IN_DSH = false
+try { IN_DSH = IS_PLUGIN && window.parent !== window && Boolean(window.parent.document) } catch { IN_DSH = false }
+
 const $ = s => document.querySelector(s)
 let CAT = null
 let cands = []
@@ -21,6 +26,154 @@ const colorOf = i => PALETTE[i % PALETTE.length]
 const num = n => (n === null || n === undefined) ? '—' : Number(n).toLocaleString('en-US')
 const pct = n => (n === null || n === undefined) ? '—' : (n >= 0 ? '+' : '') + Math.round(n * 100) + '%'
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+/* ---------------- 发到对话 / 安装 ---------------- */
+let toastTimer = 0
+function toast(text, command) {
+  const el = $('#toast')
+  el.innerHTML = esc(text) + (command ? `<code>${esc(command)}</code>` : '')
+  el.classList.add('on')
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => el.classList.remove('on'), command ? 9000 : 3500)
+}
+
+// 外层回话：发出去了没有
+const ASK_RESULT = {
+  sent: '已发到对话，AI 正在看',
+  queued: '这句已经在对话里排着队了',
+  draft: '对话输入框里还有没发出的文字，先发掉或清空再试',
+  none: '没找到当前对话：先打开一个对话，再从右侧栏用',
+}
+let askSeq = 0
+window.addEventListener('message', e => {
+  if (e.source !== window.parent || !e.data || e.data.type !== 'dsh-pick:ask-result') return
+  toast(ASK_RESULT[e.data.status] || '没发出去，再试一次')
+})
+
+/** 把一段话交给外层，写进当前对话发出去 */
+function askAI(text) {
+  if (!IN_DSH) return
+  window.parent.postMessage({ type: 'dsh-pick:ask', id: ++askSeq, text }, location.origin)
+}
+
+/** 一个包的关键数字（发给 AI 用，一行） */
+function factLine(r) {
+  const d = r.deep
+  return [
+    `周下载 ${num(r.w)}`,
+    d ? `日常基线 ${num(d.base)}` : '无去噪指标（周下载 Top 之外）',
+    d ? `近 7 日环比 ${pct(d.growth)}` : '',
+    d && d.cadence != null ? `${d.cadence} 天/版` : '',
+    d && d.age != null ? `${d.age} 天前更新` : '',
+    d ? `健康度 ${d.s}` : '',
+    r.rank ? `总榜 #${r.rank}` : '',
+  ].filter(Boolean).join(' · ')
+}
+const needLine = () => {
+  const need = $('#need').value.trim()
+  return need ? `我的需求：${need}` : null
+}
+const dataAsOf = () => `（dsh-pick 数据，截止 ${CAT.anchor}；下载量含 CI / 镜像流量，不等于用户数）`
+const TAIL = '需要更多数据可以用 pick_search / pick_stats / pick_compare 查。先只分析，不要安装。'
+
+function askCard(r) {
+  return [
+    `帮我看看 DSH 插件 ${r.n}（v${r.v}，${r.cat}）值不值得装。`,
+    needLine(),
+    `简介：${String(r.d || '').slice(0, 200)}`,
+    `数据${dataAsOf()}：${factLine(r)}`,
+    '',
+    `请说说它适不适合我、有什么风险、有没有更好的替代。${TAIL}`,
+  ].filter(x => x != null).join('\n')
+}
+
+function askCands() {
+  return [
+    `我在找 DSH 插件，需求是「${$('#need').value.trim()}」。dsh-pick 找到这些候选${dataAsOf()}：`,
+    ...cands.map((r, i) => `${i + 1}. ${r.n}（${r.cat}）— ${factLine(r)} — ${String(r.d || '').slice(0, 80)}`),
+    '',
+    `请帮我挑出最合适的 1~2 个并说明理由，不合适的也说一句为什么。${TAIL}`,
+  ].join('\n')
+}
+
+function askVerdict() {
+  const rows = picked.map(n => CAT.packages[n]).filter(Boolean)
+  const rule = $('#verdicts').innerText.trim().replace(/\n+/g, ' / ')
+  return [
+    `帮我在这几个 DSH 插件里做个选择${dataAsOf()}。`,
+    needLine(),
+    ...rows.map(r => `- ${r.n}（${r.cat}）：${factLine(r)}`),
+    rule ? `dsh-pick 的规则结论（只按数字算的，仅供参考）：${rule}` : null,
+    '',
+    `请结合我的需求重新判断：选哪个、为什么、什么情况下该选别的。${TAIL}`,
+  ].filter(x => x != null).join('\n')
+}
+
+function askWatch() {
+  const rows = watch().map(n => CAT.packages[n]).filter(Boolean)
+  return [
+    `帮我看看我关注的这些 DSH 插件最近怎么样${dataAsOf()}：`,
+    ...rows.map(r => `- ${r.n}（${r.cat}）：${factLine(r)}`),
+    '',
+    `谁在涨、谁停更了、有没有该换掉的？${TAIL}`,
+  ].join('\n')
+}
+
+// 已装的插件、能不能在这里装（外层 DSH 的插件管理器）
+let INSTALLED = new Set()
+let CAN_INSTALL = false
+async function loadInstalled() {
+  if (!IN_DSH) return
+  try {
+    const j = await (await fetch('/api-dsh-pick/installed', { cache: 'no-store' })).json()
+    INSTALLED = new Set(j.names || [])
+    CAN_INSTALL = Boolean(j.canInstall)
+  } catch { /* 拿不到就不显示安装 */ }
+}
+
+/** 卡片上的安装区：已安装 / 安装（点一下变「确认安装」，再点才装） */
+function installArea(r) {
+  if (!IN_DSH) return ''
+  if (INSTALLED.has(r.n)) return '<span class="badge-in">✓ 已安装</span>'
+  if (!CAN_INSTALL) return ''
+  return `<button class="inst" data-install="${esc(r.n)}" title="用 DSH 的插件管理器安装">安装</button>`
+}
+
+async function onInstallClick(btn) {
+  const name = btn.dataset.install
+  if (!btn.classList.contains('confirm')) {
+    btn.classList.add('confirm')
+    btn.textContent = '确认安装？'
+    setTimeout(() => {
+      if (btn.isConnected && btn.classList.contains('confirm') && !btn.disabled) {
+        btn.classList.remove('confirm'); btn.textContent = '安装'
+      }
+    }, 4000)
+    return
+  }
+  btn.disabled = true
+  btn.textContent = '安装中…'
+  try {
+    const r = await fetch('/api-dsh-pick/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    const j = await r.json()
+    if (j.ok) {
+      INSTALLED.add(name)
+      toast(j.restart ? `${name} 已安装，重启 DSH 后生效` : `${name} 已安装`)
+      renderCands($('#need').value.trim())
+      return
+    }
+    toast(j.message || '安装失败', j.command)
+  } catch (e) {
+    toast('安装请求失败：' + e.message)
+  }
+  btn.disabled = false
+  btn.classList.remove('confirm')
+  btn.textContent = '安装'
+}
 
 /* ---------------- 排名文案与外链按钮 ---------------- */
 function rankText(rec) {
@@ -78,7 +231,15 @@ async function boot() {
   $('#foot').innerHTML =
     `<b>口径：</b>下载量含 CI、镜像、爬虫等非人类流量，不等于用户数；<b>日常基线</b>= 扣掉版本发布日与次日后的每日中位数，比原始下载量更接近真实使用量。<br>` +
     `<b>覆盖范围：</b>npm 上带 <code>dsh-plugin</code> 关键字的 ${num(CAT.total)} 个包；去噪指标只算了周下载 Top ${num(deepN)}。目录每天重建一次，重跑 <code>dsh-pick build</code> 即可。<br>` +
-    `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。装上 DSH 插件版后，这一步由 AI 生成，可结合你的具体场景解释取舍。`
+    (IN_DSH
+      ? `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。点各处的「+AI」，把数据发到对话里让 AI 结合你的场景分析；在对话里也可以直接问「哪个插件能做某某」，AI 会自己查这份目录。`
+      : `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。装上 DSH 插件版后，可以一键交给 AI，结合你的具体场景解释取舍。`)
+
+  await loadInstalled()
+  if (IN_DSH) {
+    ;['#aiCands', '#aiVerdict', '#aiWatch'].forEach(id => $(id).classList.remove('hidden'))
+    $('#verdictCap').textContent = '以下判断由本地规则给出，只看数字。点「+AI 帮我判断」，让对话里的 AI 结合你的具体场景解释取舍。'
+  }
 
   buildCategoryFilter()
   renderRank()
@@ -117,6 +278,10 @@ function bindEvents() {
     })
   })
   $('#rankCat').addEventListener('change', renderRank)
+
+  $('#aiCands').addEventListener('click', () => cands.length && askAI(askCands()))
+  $('#aiVerdict').addEventListener('click', () => picked.length >= 2 && askAI(askVerdict()))
+  $('#aiWatch').addEventListener('click', () => watch().length && askAI(askWatch()))
 
   $('#btnExport').addEventListener('click', exportHtml)
   $('#btnWatch').addEventListener('click', addPickedToWatch)
@@ -158,9 +323,19 @@ function renderCands(need) {
           `<span>月 <b>${num(rec.m)}</b></span>` +
           (d ? `<span>基线 <b>${num(d.base)}</b></span><span>环比 <b>${pct(d.growth)}</b></span>` : '') +
         `</div>` +
-        `<div class="links">${linkBtns(rec)}</div>` +
+        `<div class="links">${linkBtns(rec)}<span class="sp"></span>${installArea(rec)}` +
+          (IN_DSH ? `<button class="ai" data-ask title="把这个插件的数据发到对话里问 AI">+AI</button>` : '') +
+        `</div>` +
       `</div>`
-    el.addEventListener('click', () => togglePick(rec.n))
+    el.addEventListener('click', e => {
+      // 卡片上的按钮和链接各管各的，不算「选中」
+      const ask = e.target.closest('[data-ask]')
+      if (ask) { e.stopPropagation(); askAI(askCard(rec)); return }
+      const inst = e.target.closest('[data-install]')
+      if (inst) { e.stopPropagation(); onInstallClick(inst); return }
+      if (e.target.closest('a')) return
+      togglePick(rec.n)
+    })
     host.appendChild(el)
   })
 

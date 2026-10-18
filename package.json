@@ -1,6 +1,6 @@
 {
   "name": "dsh-pick",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "帮你在 DSH 生态里选对插件：说需求 → 找候选 → 多维比较 → 出结论。下载量是证据，AI 是推理。",
   "type": "module",
   "main": "./plugin/index.js",
