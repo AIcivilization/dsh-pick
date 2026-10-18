@@ -1,8 +1,14 @@
 {
   "name": "dsh-pick",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "帮你在 DSH 生态里选对插件：说需求 → 找候选 → 多维比较 → 出结论。下载量是证据，AI 是推理。",
   "type": "module",
+  "main": "./plugin/index.js",
+  "exports": {
+    ".": "./plugin/index.js",
+    "./client": "./plugin/client.js",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "dsh-pick": "bin/dsh-pick.js"
   },
