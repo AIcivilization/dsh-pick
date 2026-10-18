@@ -13,6 +13,41 @@
   --ok:#0f9d58; --ok-bg:#e7f6ee;
   --warn:#d97a06; --warn-bg:#fdf3e3;
   --bad:#c94040; --bad-bg:#fdecec;
+  --input:#fcfcfd; --mute:#b9c2ce; --row-hover:#fafbfc; --accent-line:#c6d4f5;
+  --bar-bg:rgba(245,246,248,.92); --shadow:rgba(16,24,40,.09); --focus:rgba(47,107,255,.12);
+  --ok-text:#0b7a45; --warn-text:#a8620a; --bad-text:#a52f2f;
+  --ok-line:#bfe6d1; --warn-line:#f2ddb6; --bad-line:#f2cccc;
+  color-scheme:light;
+}
+/* 暗色：嵌在 DSH 里时由下面的脚本按 DSH 主题设 data-theme（并把 DSH 的颜色变量覆盖上来）；
+   单独打开（dsh-pick serve）时跟随系统 */
+:root[data-theme="dark"]{
+  --bg:#17181c; --panel:#212228; --line:rgba(255,255,255,.12); --soft:#2a2c33;
+  --text:#e9ebf0; --t2:#b3b9c4; --t3:#868d99;
+  --accent:#5b8cff; --accent-bg:rgba(91,140,255,.16);
+  --ok:#3ccf7f; --ok-bg:rgba(60,207,127,.13);
+  --warn:#f0a43a; --warn-bg:rgba(240,164,58,.13);
+  --bad:#f06b6b; --bad-bg:rgba(240,107,107,.13);
+  --input:#1b1c21; --mute:#5c626d; --row-hover:rgba(255,255,255,.04); --accent-line:rgba(91,140,255,.45);
+  --bar-bg:rgba(23,24,28,.9); --shadow:rgba(0,0,0,.4); --focus:rgba(91,140,255,.25);
+  --ok-text:#5fd99a; --warn-text:#f3b65e; --bad-text:#f58a8a;
+  --ok-line:rgba(60,207,127,.3); --warn-line:rgba(240,164,58,.3); --bad-line:rgba(240,107,107,.3);
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#17181c; --panel:#212228; --line:rgba(255,255,255,.12); --soft:#2a2c33;
+    --text:#e9ebf0; --t2:#b3b9c4; --t3:#868d99;
+    --accent:#5b8cff; --accent-bg:rgba(91,140,255,.16);
+    --ok:#3ccf7f; --ok-bg:rgba(60,207,127,.13);
+    --warn:#f0a43a; --warn-bg:rgba(240,164,58,.13);
+    --bad:#f06b6b; --bad-bg:rgba(240,107,107,.13);
+    --input:#1b1c21; --mute:#5c626d; --row-hover:rgba(255,255,255,.04); --accent-line:rgba(91,140,255,.45);
+    --bar-bg:rgba(23,24,28,.9); --shadow:rgba(0,0,0,.4); --focus:rgba(91,140,255,.25);
+    --ok-text:#5fd99a; --warn-text:#f3b65e; --bad-text:#f58a8a;
+    --ok-line:rgba(60,207,127,.3); --warn-line:rgba(240,164,58,.3); --bad-line:rgba(240,107,107,.3);
+    color-scheme:dark;
+  }
 }
 *{box-sizing:border-box}
 body{
@@ -24,7 +59,7 @@ body{
 a{color:var(--accent);text-decoration:none}
 
 /* ---------- 顶栏 ---------- */
-.bar{position:sticky;top:0;z-index:40;background:rgba(245,246,248,.92);backdrop-filter:blur(8px);
+.bar{position:sticky;top:0;z-index:40;background:var(--bar-bg);backdrop-filter:blur(8px);
   padding:16px 0 12px;border-bottom:1px solid var(--line);margin-bottom:22px}
 .bar .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .logo{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;
@@ -36,7 +71,7 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 .tabs{display:flex;gap:2px;margin-top:14px;background:var(--soft);border-radius:9px;padding:3px;width:max-content}
 .tabs button{appearance:none;border:none;background:transparent;font-family:inherit;font-size:12.5px;
   font-weight:600;color:var(--t3);padding:7px 16px;border-radius:6px;cursor:pointer}
-.tabs button.on{background:#fff;color:var(--text);box-shadow:0 1px 2px rgba(16,24,40,.09)}
+.tabs button.on{background:var(--panel);color:var(--text);box-shadow:0 1px 2px var(--shadow)}
 
 /* ---------- 选插件 ---------- */
 .ask{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:18px}
@@ -44,24 +79,24 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 .ask .row{display:flex;gap:10px}
 .ask input{
   flex:1;appearance:none;border:1px solid var(--line);border-radius:10px;padding:13px 16px;
-  font-size:14.5px;font-family:inherit;background:#fcfcfd;color:var(--text)
+  font-size:14.5px;font-family:inherit;background:var(--input);color:var(--text)
 }
-.ask input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,107,255,.12);background:#fff}
+.ask input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--focus);background:var(--panel)}
 .btn{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:inherit;
   font-size:13.5px;font-weight:600;padding:0 22px;border-radius:10px;cursor:pointer;white-space:nowrap}
 .btn:hover{filter:brightness(1.07)}
-.btn.ghost{background:#fff;color:var(--accent)}
+.btn.ghost{background:var(--panel);color:var(--accent)}
 .btn.ghost:hover{background:var(--accent-bg);filter:none}
 .btn:disabled{opacity:.5;cursor:default}
-.cand .ok{font-size:9.5px;background:var(--ok-bg);color:#0b7a45;border-radius:20px;padding:1px 6px;font-weight:700;flex:none}
-.cand .nook{font-size:9.5px;background:#f0f2f5;color:var(--t3);border-radius:20px;padding:1px 6px;flex:none}
+.cand .ok{font-size:9.5px;background:var(--ok-bg);color:var(--ok-text);border-radius:20px;padding:1px 6px;font-weight:700;flex:none}
+.cand .nook{font-size:9.5px;background:var(--soft);color:var(--t3);border-radius:20px;padding:1px 6px;flex:none}
 .cand .rk{font-size:10.5px;color:var(--t3);margin:-2px 0 5px;font-variant-numeric:tabular-nums}
 .cand .rk b{color:var(--t2);font-weight:700}
 .cand .d{font-size:11.5px;color:var(--t2);margin:5px 0 8px;line-height:1.5;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .links{display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line)}
 .lk{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--t2);text-decoration:none;
-  border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:#fff;transition:.15s}
+  border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--panel);transition:.15s}
 .lk:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .lk svg{flex:none}
 .examples{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
@@ -78,12 +113,12 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 
 /* ---------- 候选卡 ---------- */
 .cands{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:11px}
-.cand{border:1px solid var(--line);border-radius:11px;padding:13px 14px;background:#fcfcfd;
+.cand{border:1px solid var(--line);border-radius:11px;padding:13px 14px;background:var(--input);
   display:flex;gap:11px;cursor:pointer;transition:border-color .15s,background .15s;position:relative}
-.cand:hover{border-color:#c6d4f5}
+.cand:hover{border-color:var(--accent-line)}
 .cand.on{border-color:var(--accent);background:var(--accent-bg)}
-.cand .box{width:17px;height:17px;border:1.5px solid #b9c2ce;border-radius:5px;flex:none;margin-top:2px;
-  display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;background:#fff}
+.cand .box{width:17px;height:17px;border:1.5px solid var(--mute);border-radius:5px;flex:none;margin-top:2px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;background:var(--panel)}
 .cand.on .box{background:var(--accent);border-color:var(--accent)}
 .cand .body{min-width:0;flex:1}
 .cand .nm{font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -106,16 +141,16 @@ table.cmp thead th i{display:inline-block;width:8px;height:8px;border-radius:2px
 table.cmp tbody tr:last-child td{border-bottom:none}
 td.best{color:var(--ok);font-weight:700}
 td.best::after{content:' ★';font-size:9px}
-.miss{color:#b9c2ce}
+.miss{color:var(--mute)}
 .num{font-variant-numeric:tabular-nums}
 
 /* ---------- 结论 ---------- */
 .verdict{border-radius:11px;padding:14px 16px;margin-bottom:11px;border:1px solid}
-.verdict.win{background:var(--ok-bg);border-color:#bfe6d1}
-.verdict.alt{background:var(--warn-bg);border-color:#f2ddb6}
-.verdict.no{background:var(--bad-bg);border-color:#f2cccc}
+.verdict.win{background:var(--ok-bg);border-color:var(--ok-line)}
+.verdict.alt{background:var(--warn-bg);border-color:var(--warn-line)}
+.verdict.no{background:var(--bad-bg);border-color:var(--bad-line)}
 .verdict h4{margin:0 0 6px;font-size:13px;display:flex;align-items:center;gap:7px}
-.verdict.win h4{color:#0b7a45}.verdict.alt h4{color:#a8620a}.verdict.no h4{color:#a52f2f}
+.verdict.win h4{color:var(--ok-text)}.verdict.alt h4{color:var(--warn-text)}.verdict.no h4{color:var(--bad-text)}
 .verdict p{margin:0;font-size:12.5px;color:var(--t2);line-height:1.7}
 .verdict p b{color:var(--text);font-weight:650}
 .rule{font-size:11.5px;color:var(--t3);margin-top:12px;padding-top:11px;border-top:1px dashed var(--line);line-height:1.8}
@@ -123,11 +158,11 @@ td.best::after{content:' ★';font-size:9px}
 /* ---------- 排行榜 ---------- */
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
 .filters select{appearance:none;border:1px solid var(--line);border-radius:8px;padding:7px 11px;
-  font-family:inherit;font-size:12.5px;background:#fff;color:var(--t2);cursor:pointer}
+  font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--t2);cursor:pointer}
 table.rank{width:100%;border-collapse:collapse;font-size:12.5px}
 table.rank th{text-align:left;font-size:11px;color:var(--t3);font-weight:600;padding:0 10px 9px;border-bottom:1px solid var(--line)}
 table.rank td{padding:9px 10px;border-bottom:1px solid var(--soft);color:var(--t2);font-variant-numeric:tabular-nums}
-table.rank tbody tr:hover td{background:#fafbfc}
+table.rank tbody tr:hover td{background:var(--row-hover)}
 table.rank td.nm{color:var(--text);font-weight:650;font-variant-numeric:normal}
 td.r,th.r{text-align:right}
 td.up{color:var(--ok);font-weight:600}
@@ -147,7 +182,7 @@ td.down{color:var(--bad);font-weight:600}
 .foot{font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:6px}
 .foot b{color:var(--t2);font-weight:650}
 .spark{display:inline-flex;align-items:flex-end;gap:1px;height:16px;vertical-align:middle}
-.spark i{width:3px;background:#b9c2ce;border-radius:1px;display:block}
+.spark i{width:3px;background:var(--mute);border-radius:1px;display:block}
 .hidden{display:none!important}
 @media(max-width:720px){
   body{padding:0 12px 48px}
@@ -165,6 +200,45 @@ td.down{color:var(--bad);font-weight:600}
   .section{padding:15px 13px}
 }
 </style>
+<script>
+// 嵌在 DSH 里（同源 iframe）时跟着 DSH 的主题走：
+// DSH 暗色时在 body 上挂 data-ds-dark-theme，颜色变量（--dsw-alias-*）也写在 body 上。
+// 这里把明暗同步过来，再把 DSH 的底色、文字、边框、链接色覆盖到面板自己的变量上；DSH 一切换就跟着重算。
+(function () {
+  var host
+  try { host = window.parent !== window && window.parent.document && window.parent.document.body } catch (e) { host = null }
+  if (!host) return
+  var MAP = {
+    '--bg': '--dsw-alias-bg-base',
+    '--panel': '--dsw-alias-bg-layer-2',
+    '--soft': '--dsw-alias-bg-module-platform',
+    '--line': '--dsw-alias-border-l2',
+    '--text': '--dsw-alias-label-primary',
+    '--t2': '--dsw-alias-label-secondary',
+    '--t3': '--dsw-alias-label-tertiary',
+    '--accent': '--dsw-alias-link',
+  }
+  var root = document.documentElement
+  function sync() {
+    var dark = host.hasAttribute('data-ds-dark-theme')
+    root.setAttribute('data-theme', dark ? 'dark' : 'light')
+    var cs = window.parent.getComputedStyle(host)
+    for (var k in MAP) {
+      var v = cs.getPropertyValue(MAP[k]).trim()
+      if (v) root.style.setProperty(k, v)
+      else root.style.removeProperty(k)
+    }
+    // 顶栏半透明底色跟着底色走
+    var bg = cs.getPropertyValue(MAP['--bg']).trim()
+    if (bg) root.style.setProperty('--bar-bg', 'color-mix(in srgb, ' + bg + ' 92%, transparent)')
+    else root.style.removeProperty('--bar-bg')
+  }
+  sync()
+  try {
+    new window.parent.MutationObserver(sync).observe(host, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'style', 'class'] })
+  } catch (e) { /* 观察不了就只在打开时同步一次 */ }
+})()
+</script>
 </head>
 <body>
 <div class="wrap">

@@ -223,7 +223,7 @@ function renderCompare() {
 
   $('#cmpNote').innerHTML =
     `健康度 = 日常基线 40% + 增速 25% + 新鲜度 20% + 版本节奏 15%，满分 100。` +
-    (missingDeep ? `<br><span style="color:#b4530a">其中 ${missingDeep} 个未进入深挖范围（周下载 Top 榜外），去噪指标缺失，无法参与健康度比较。</span>` : '')
+    (missingDeep ? `<br><span style="color:var(--warn-text)">其中 ${missingDeep} 个未进入深挖范围（周下载 Top 榜外），去噪指标缺失，无法参与健康度比较。</span>` : '')
 
   sec.classList.remove('hidden')
   renderVerdict()
@@ -375,7 +375,7 @@ function renderWatch() {
     const w = Math.max(Math.log10(r.w + 1) / Math.log10(max + 1) * 100, 1.5)
     return `<div class="hrow" style="display:grid;grid-template-columns:210px 1fr 78px;align-items:center;gap:12px;padding:6px 0">` +
       `<div style="font-size:12px;color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(i)};margin-right:6px"></i>${esc(r.n)} <span style="color:var(--t3);font-size:10px">#${num(r.rank)}</span></div>` +
-      `<div style="height:14px;background:#f1f3f6;border-radius:4px"><div style="height:100%;width:${w}%;background:${colorOf(i)};border-radius:4px"></div></div>` +
+      `<div style="height:14px;background:var(--soft);border-radius:4px"><div style="height:100%;width:${w}%;background:${colorOf(i)};border-radius:4px"></div></div>` +
       `<div style="font-size:12px;font-weight:650;text-align:right">${num(r.w)}</div></div>`
   }).join('')
 }

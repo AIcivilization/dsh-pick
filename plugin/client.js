@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
       sub: 'var(--dsw-alias-label-secondary, #888)',
       faint: 'var(--dsw-alias-label-tertiary, #999)',
       border: 'var(--dsw-alias-border-l3, rgba(127,127,127,.25))',
-      accent: '#2f6bff',
+      accent: 'var(--dsw-alias-link, #2f6bff)',
       danger: '#c94040',
     }
 
