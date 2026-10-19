@@ -1,0 +1,59 @@
+# 每日目录：每天重建一次 DSH 插件目录，推到本仓库的 catalog 分支。
+# 插件（lib/remote.js）从 jsDelivr / raw.githubusercontent.com 取，不用为了更新数据而发版。
+#
+# catalog 分支每次强推、只留一个提交：目录 1.5 MB，天天累积提交会把仓库撑大。
+# 手动触发：GitHub → Actions → 每日目录 → Run workflow。
+
+name: 每日目录
+
+on:
+  schedule:
+    # UTC 02:30（北京时间 10:30）。npm 下载统计本来就滞后约 5 天，几点跑都一样
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 测试
+        run: npm test
+
+      - name: 构建目录
+        run: node bin/dsh-pick.js build --deep 332
+
+      - name: 校验并生成 meta.json
+        run: node scripts/catalog-meta.mjs data/catalog.json out
+
+      - name: 推到 catalog 分支
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          git init -q -b catalog
+          git add catalog.json meta.json
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qm "目录 $(node -p "require('./meta.json').anchor")"
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" catalog
+
+      - name: 刷新 jsDelivr 缓存
+        # 刷不掉也不要紧：jsDelivr 对分支的缓存最多 12 小时，插件 6 小时问一次，晚半天拿到而已
+        continue-on-error: true
+        run: |
+          for f in catalog.json meta.json; do
+            curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@catalog/$f" > /dev/null && echo "已刷新 $f"
+          done

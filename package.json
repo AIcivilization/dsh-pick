@@ -12,6 +12,10 @@
   "bin": {
     "dsh-pick": "bin/dsh-pick.js"
   },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "release": "node scripts/release.mjs"
+  },
   "dsh": {
     "bundle": {
       "patch": "./plugin/cordis.patch.yml"

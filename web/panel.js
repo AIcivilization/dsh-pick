@@ -131,11 +131,78 @@ async function loadInstalled() {
   } catch { /* 拿不到就不显示安装 */ }
 }
 
-/** 卡片上的安装区：已安装 / 安装（点一下变「确认安装」，再点才装） */
+// 和当前 DSH 兼不兼容：问插件市场（dshmarket）的接口——它按插件声明的 DSH 版本要求算好了，
+// 规则和它的安装检查一致。没装插件市场就不显示这一项（接口 404），只用目录里的安装信息
+const COMPAT = new Map() // 包名 → { status: 'compatible'|'incompatible'|'unknown', requirement }
+let HOST_VERSION = null
+let marketCompat = true
+async function loadCompat(names) {
+  if (!IN_DSH || !marketCompat) return
+  const want = names.filter(n => !COMPAT.has(n)).slice(0, 64)
+  if (!want.length) return
+  want.forEach(n => COMPAT.set(n, null)) // 先占位：查不到也不反复查
+  try {
+    const r = await fetch('/dsh-market/discovery-compatibility', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ packages: want }),
+    })
+    if (r.status === 404) { marketCompat = false; return }
+    if (!r.ok) return
+    const j = await r.json()
+    HOST_VERSION = j.hostVersion || HOST_VERSION
+    for (const [n, v] of Object.entries(j.plugins || {})) COMPAT.set(n, v || null)
+    renderCands($('#need').value.trim(), { keepCompat: true })
+  } catch { /* 查不到就不显示 */ }
+}
+
+/** 已装插件里和它同类的（「其他」类不算，太杂） */
+function sameKindInstalled(r) {
+  if (!r.cat || r.cat === '其他' || INSTALLED.has(r.n)) return []
+  return [...INSTALLED].filter(n => n !== r.n && n !== 'dsh-pick' && CAT.packages[n] && CAT.packages[n].cat === r.cat)
+}
+
+/**
+ * 能不能装、为什么不能：目录里的安装信息（dsh.bundle、客户端平台）+ 插件市场给的兼容结论
+ * @returns {{ok: boolean, warn: string[], good: string[]}}
+ */
+function installCheck(r) {
+  const warn = []
+  const good = []
+  let ok = true
+  const inst = r.inst
+  if (inst && !inst.b) { ok = false; warn.push('没声明 dsh.bundle，DSH 装不了') }
+  if (inst && inst.p && inst.p !== 'web') { ok = false; warn.push(`${inst.p} 客户端插件，装进这里可能让 DSH 起不来`) }
+  const c = COMPAT.get(r.n)
+  if (c && c.status === 'incompatible') {
+    ok = false
+    warn.push(`和你的 DSH${HOST_VERSION ? ' ' + HOST_VERSION : ''} 不兼容${c.requirement ? `（需要 ${c.requirement}）` : ''}`)
+  } else if (c && c.status === 'compatible' && ok) {
+    // 已经装不了（没 bundle、终端版）就不说「兼容」：版本对得上不等于装得上，两句放一起让人困惑
+    good.push(`兼容你的 DSH${HOST_VERSION ? ' ' + HOST_VERSION : ''}`)
+  }
+  const same = sameKindInstalled(r)
+  if (same.length) warn.push(`你已装同类：${same.join('、')}`)
+  return { ok, warn, good }
+}
+
+/** 卡片上的提醒行 */
+function checkRow(r) {
+  if (!IN_DSH) return ''
+  const { warn, good } = installCheck(r)
+  if (!warn.length && !good.length) return ''
+  return `<div class="chk">` +
+    good.map(t => `<span class="good">✓ ${esc(t)}</span>`).join('') +
+    warn.map(t => `<span class="warn">⚠ ${esc(t)}</span>`).join('') +
+    `</div>`
+}
+
+/** 卡片上的安装区：已安装 / 安装（点一下变「确认安装」，再点才装）/ 装不了 */
 function installArea(r) {
   if (!IN_DSH) return ''
   if (INSTALLED.has(r.n)) return '<span class="badge-in">✓ 已安装</span>'
   if (!CAN_INSTALL) return ''
+  if (!installCheck(r).ok) return '<span class="badge-no" title="原因见卡片上的提醒">不能安装</span>'
   return `<button class="inst" data-install="${esc(r.n)}" title="用 DSH 的插件管理器安装">安装</button>`
 }
 
@@ -295,7 +362,8 @@ function doSearch() {
   renderCands(need)
 }
 
-function renderCands(need) {
+function renderCands(need, { keepCompat = false } = {}) {
+  if (!keepCompat) loadCompat(cands.map(r => r.n))
   const host = $('#cands')
   host.innerHTML = ''
   if (!cands.length) {
@@ -323,6 +391,7 @@ function renderCands(need) {
           `<span>月 <b>${num(rec.m)}</b></span>` +
           (d ? `<span>基线 <b>${num(d.base)}</b></span><span>环比 <b>${pct(d.growth)}</b></span>` : '') +
         `</div>` +
+        checkRow(rec) +
         `<div class="links">${linkBtns(rec)}<span class="sp"></span>${installArea(rec)}` +
           (IN_DSH ? `<button class="ai" data-ask title="把这个插件的数据发到对话里问 AI">+AI</button>` : '') +
         `</div>` +

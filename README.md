@@ -56,14 +56,15 @@ dsh plugin --profile web add dsh-pick
 
   每个工具的结果都带口径说明，并要求 AI 只引用工具给的数字，不自己推算。
 - **安装**：候选卡片上点「安装 → 确认安装」，交给 DSH 的插件管理器装；已装的显示「✓ 已安装」。只能装目录里有的插件（带 `dsh-plugin` 关键字的 npm 包）。
+- **装之前先看能不能装**：卡片上会提醒——
+  - ✓ 兼容你的 DSH / ⚠ 和你的 DSH 不兼容（需要 …）：问的是插件市场（dshmarket）的兼容性接口，规则和它安装前的检查一致；没装插件市场就不显示这一项
+  - ⚠ 没声明 dsh.bundle：DSH 一定拒绝安装
+  - ⚠ tui 客户端插件：装进桌面版 / 网页版可能让 DSH 起不来
+  - ⚠ 你已装同类：功能可能重叠
 
-首次使用要先生成目录（在 dsh-pick 的安装目录下，或任意目录）：
+  装不了的不给「安装」按钮，AI 工具的结果里也带着同样的提醒。
 
-```sh
-npx dsh-pick build --deep 332
-```
-
-不跑也行——面板会提示「目录未生成」，排行榜和搜索会空着，但界面照常打开。
+**数据每天自动更新**：GitHub Actions 每天重建一次目录，推到本仓库的 `catalog` 分支。插件启动时、之后每 6 小时检查一次，有新的就下载到 `~/.dsh/dsh-pick/`（先走 jsDelivr，再走 raw.githubusercontent.com）。取不到就用包里自带的那份，不影响使用；设置页会写明当前用的是哪份。
 
 ### 作为命令行 / 独立网页
 
@@ -105,11 +106,17 @@ dsh-pick/
 ├── bin/dsh-pick.js     CLI 入口
 ├── lib/
 │   ├── engine.js       数据引擎：抓目录、算指标、查询（一个引擎，多个入口）
+│   ├── remote.js       每日更新的目录：检查、下载、校验、换上
 │   ├── classify.js     13 类 + 其他，关键词加权分类
 │   ├── metrics.js      去噪指标：基线 / 增速 / 节奏 / 新鲜度 / 健康度
 │   ├── words.js        需求 → 搜索词（同义词 + 中文二元切分），CLI 与面板共用
 │   └── normalize.js    （在 engine.js 内）排名与链接字段
-├── data/catalog.json   目录产物
+├── data/catalog.json   随包自带的目录（兜底；每日更新的那份在 ~/.dsh/dsh-pick/）
+├── scripts/
+│   ├── release.mjs     发版脚本（npm run release）
+│   └── catalog-meta.mjs 每日目录发布前的校验
+├── test/               npm test（Node 自带的 node:test，不装任何依赖）
+├── .github/workflows/catalog.yml  每天重建目录、推到 catalog 分支
 ├── plugin/
 │   ├── index.js        DSH 宿主端：挂 /api-dsh-pick/* 路由（面板、更新、卸载、安装）
 │   ├── tools.js        给对话里的 AI 用的 4 个工具（pick_search / stats / compare / rank）
@@ -130,6 +137,8 @@ dsh-pick/
 - **滞后**：npm 统计约滞后 5 天，页面显示的「数据截止」是最后一个已汇总的完整日
 - **覆盖**：npm 上带 `dsh-plugin` 关键字的 2,250 个包（search 接口深分页上限约 2,250）
 - **去噪范围**：只有周下载 Top 332 会抓 30 天日序列和发布历史，其余只有周/月下载量
+- **安装信息**：全部包都会读 npm 上最新版本的 manifest，记下有没有 `dsh.bundle`、客户端平台、声明的 DSH 版本要求
+- **更新频率**：每天一次（GitHub Actions，北京时间 10:30 左右）
 - **下载量口径**：含 CI、镜像源、爬虫、缓存回源等非人类流量，**不等于用户数**
 
 ---
@@ -148,6 +157,9 @@ dsh-pick/
 - DSH 插件形态：右侧栏完整面板 + 设置页精简版，跟随 DSH 明暗主题；面板内更新 / 卸载本插件
 - 「+AI」把面板内容发到对话；面板内一键安装插件
 - 4 个 AI 工具：`pick_search` / `pick_stats` / `pick_compare` / `pick_rank`（口径随结果附上，禁止 AI 自己推算数字）
+- 目录每天自动更新（GitHub Actions → catalog 分支 → 插件定时取）
+- 装之前的检查：兼容性（借插件市场）、dsh.bundle、客户端平台、已装同类
+- 自动化测试（`npm test`）与发版脚本（`npm run release`）
 
 **待做**
 - 更多 AI 工具：`pick_trend`（走势）/ `pick_export`（导出结论）
@@ -158,26 +170,20 @@ dsh-pick/
 
 ---
 
-## 发布流程（每次发版照这个走，一步都别省）
+## 发布流程
 
 ```sh
-cd /Users/wf/dsh/dsh-pick
-
-# 1. 改 package.json 里的 version（npm 不许覆盖已发布版本）
-# 2. 提交并推 GitHub —— 代码是真源，必须早于 npm
-git add -A && git commit -m "vX.Y.Z：改了什么"
-git push origin main
-
-# 3. 打 tag 并推送（必须，用来对应 npm 版本）
-git tag -a vX.Y.Z -m "dsh-pick vX.Y.Z：改了什么"
-git push origin vX.Y.Z
-
-# 4. 发布 npm（会问 OTP）
-npm publish
-
-# 5. 验证
-npm view dsh-pick version                                    # 应等于 X.Y.Z
+npm run release -- patch -m "改了什么"              # 0.3.1 → 0.3.2；也可以写 minor / major / 具体版本号
+npm run release -- patch -m "改了什么" --dry-run    # 演练：只检查、只跑测试，什么都不改
 ```
+
+在哪个目录运行都行。脚本按顺序做：
+
+1. 检查：在 main 上、没有未提交的改动、没落后于 GitHub、标签和 npm 版本都还没用过
+2. 跑测试（`npm test`），不过就停
+3. 改版本号并提交 → 推 GitHub → 打标签并推送
+4. `npm publish`（可能要在浏览器里确认）
+5. 等到 npm 上真的能查到新版本才算完（npm 收下后要处理一两分钟）
 
 **顺序不能反**：先 GitHub 再 npm，这样 npm 上每个版本都能在 git 里找到对应提交。
 

@@ -307,6 +307,11 @@ window.__ModuleLoader__.load({
 
         h(Section, { title: L('数据口径', 'About the data') },
           h('div', null, catalog),
+          meta && meta.total ? h('div', { style: { marginTop: 4 } }, meta.source === 'remote'
+            ? L('数据每天自动更新' + (meta.checkedAt ? `，最近一次检查 ${new Date(meta.checkedAt).toLocaleString()}` : '') + '。',
+                'Data updates daily' + (meta.checkedAt ? `; last checked ${new Date(meta.checkedAt).toLocaleString()}` : '') + '.')
+            : L('现在用的是随插件自带的数据：每日更新还没取到（网络不通时会这样），取到后自动换上。',
+                'Using the data bundled with the plugin; the daily update has not arrived yet and will be used once it does.')) : null,
           h('div', { style: { marginTop: 4 } }, DATA_NOTE()),
         ),
       )

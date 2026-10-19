@@ -25,18 +25,19 @@ const plain = v => JSON.parse(JSON.stringify(v == null ? null : v))
 const NOTE =
   '口径：周下载/月下载含 CI、镜像、爬虫流量，不等于用户数；日常基线 = 扣掉发布日与次日后的每日中位数，最接近真实使用量；' +
   '环比 = 近 7 日比前 7 日；健康度 0~100 = 基线 40% + 增速 25% + 新鲜度 20% + 版本节奏 15%。' +
-  '只有周下载 Top 约 330 的包有去噪指标，其余为「—」。回答里的数字只能引用这些结果，不要自己推算。'
+  '只有周下载 Top 约 330 的包有去噪指标，其余为「—」。回答里的数字只能引用这些结果，不要自己推算。' +
+  '推荐前留意每个包下面的 ⚠ 提醒（装不了、终端版、和已装插件重叠），装不了的不要推荐用户装。'
 
 const num = n => (n == null ? '—' : Number(n).toLocaleString('en-US'))
 const pct = n => (n == null ? '—' : (n >= 0 ? '+' : '') + Math.round(n * 100) + '%')
 
-/** 一个包的一行摘要（给模型看） */
-function line(r, installed) {
+/** 一个包的一行摘要（给模型看）；r.installed / r.notes 由 annotate() 补上 */
+function line(r) {
   const d = r.deep
   const parts = [
     `${r.name}${r.version ? ' v' + r.version : ''}`,
     r.category ? `[${r.category}]` : '',
-    installed && installed.has(r.name) ? '（已安装）' : '',
+    r.installed ? '（已安装）' : '',
   ].filter(Boolean).join(' ')
   const nums = [
     `周下载 ${num(r.weekly)}`,
@@ -48,7 +49,33 @@ function line(r, installed) {
     r.relevance != null ? `相关度 ${r.relevance}%` : '',
   ].filter(Boolean).join(' · ')
   const desc = r.description ? `\n  ${String(r.description).slice(0, 160)}` : ''
-  return `- ${parts}\n  ${nums}${desc}`
+  const notes = r.notes && r.notes.length ? `\n  ⚠ ${r.notes.join('；')}` : ''
+  return `- ${parts}\n  ${nums}${desc}${notes}`
+}
+
+/**
+ * 给每一行补上「已安装」和安装相关的提醒：
+ * 能不能装（dsh.bundle）、是不是终端版插件、声明的 DSH 版本要求、和已装的同类插件重叠
+ */
+export function annotate(rows, cat, have) {
+  const installedByCat = new Map()
+  for (const n of have) {
+    const rec = cat.packages && cat.packages[n]
+    if (!rec || !rec.cat || rec.cat === '其他' || n === 'dsh-pick') continue
+    if (!installedByCat.has(rec.cat)) installedByCat.set(rec.cat, [])
+    installedByCat.get(rec.cat).push(n)
+  }
+  return rows.map(r => {
+    const rec = (cat.packages && cat.packages[r.name]) || {}
+    const inst = rec.inst
+    const notes = []
+    if (inst && !inst.b) notes.push('没声明 dsh.bundle，DSH 不能把它当插件安装')
+    if (inst && inst.p && inst.p !== 'web') notes.push(`这是 ${inst.p} 客户端插件，装进桌面版 / 网页版可能让 DSH 起不来`)
+    if (inst && inst.r) notes.push(`声明需要 DSH ${inst.r}`)
+    const same = (installedByCat.get(rec.cat || r.category) || []).filter(n => n !== r.name)
+    if (same.length && !have.has(r.name)) notes.push(`你已装了同类插件：${same.join('、')}，功能可能重叠`)
+    return { ...r, installed: have.has(r.name), notes }
+  })
 }
 
 /** 排行榜返回的是目录原始记录（字段名短），转成和搜索一样的形状 */
@@ -118,7 +145,7 @@ export async function buildToolDefinitions(deps = {}) {
         render: (_a, v) => [{
           type: 'text',
           text: v.candidates.length
-            ? `${v.header}\n需求「${v.need}」的候选（按相关度与下载量综合排序）：\n${v.candidates.map(r => line(r, new Set(v.installed))).join('\n')}\n\n${NOTE}`
+            ? `${v.header}\n需求「${v.need}」的候选（按相关度与下载量综合排序）：\n${v.candidates.map(r => line(r)).join('\n')}\n\n${NOTE}`
             : `${v.header}\n没找到和「${v.need}」相关的插件。可以换个说法，或用 pick_rank 看某一类的排行。`,
         }],
       },
@@ -129,8 +156,7 @@ export async function buildToolDefinitions(deps = {}) {
           limit: clampInt(args.limit, 1, 20, 8),
           category: CATS.includes(args.category) ? args.category : null,
         })
-        const have = installed()
-        return plain({ header: header(cat), need, candidates, installed: candidates.map(c => c.name).filter(n => have.has(n)) })
+        return plain({ header: header(cat), need, candidates: annotate(candidates, cat, installed()) })
       },
     }),
 
@@ -147,7 +173,7 @@ export async function buildToolDefinitions(deps = {}) {
           type: 'text',
           text: `${v.header}\n${v.rows.map(r => r.source === 'not-found'
             ? `- ${r.name}：npm 上找不到，或没有下载数据`
-            : line(r, new Set(v.installed)) + (r.source === 'live' ? '\n  （去噪指标是刚从 npm 实时算的）' : '') + (r.npmUrl ? `\n  ${r.npmUrl}` : '')).join('\n')}\n\n${NOTE}`,
+            : line(r) + (r.source === 'live' ? '\n  （去噪指标是刚从 npm 实时算的）' : '') + (r.npmUrl ? `\n  ${r.npmUrl}` : '')).join('\n')}\n\n${NOTE}`,
         }],
       },
       async execute(args) {
@@ -155,8 +181,7 @@ export async function buildToolDefinitions(deps = {}) {
         const names = cleanNames(args.names, 8)
         if (!names.length) throw new Error('names 里没有合法的 npm 包名')
         const rows = (await stats(cat, names)).map(withCatalogFields(cat))
-        const have = installed()
-        return plain({ header: header(cat), rows, installed: names.filter(n => have.has(n)) })
+        return plain({ header: header(cat), rows: annotate(rows, cat, installed()) })
       },
     }),
 
@@ -177,7 +202,7 @@ export async function buildToolDefinitions(deps = {}) {
             ...v.best.map(b => `- ${b.label}：${b.winner ? `${b.winner}（${b.value}）` : '都没有数据'}`),
             '',
             '按健康度排序（没有去噪指标的排在最后）：',
-            ...v.rows.map(r => line(r, new Set(v.installed))),
+            ...v.rows.map(r => line(r)),
             ...(v.missing.length ? ['', `查不到：${v.missing.join('、')}`] : []),
             '',
             NOTE,
@@ -206,8 +231,7 @@ export async function buildToolDefinitions(deps = {}) {
           return { label: m.label, winner: vals[0][0], value: m.fmt(vals[0][1]) }
         })
         rows.sort((a, b) => ((b.deep && b.deep.score) ?? -1) - ((a.deep && a.deep.score) ?? -1))
-        const have = installed()
-        return plain({ header: header(cat), best, rows, missing, installed: names.filter(n => have.has(n)) })
+        return plain({ header: header(cat), best, rows: annotate(rows, cat, installed()), missing })
       },
     }),
 
@@ -224,7 +248,7 @@ export async function buildToolDefinitions(deps = {}) {
         schema: ANY_JSON,
         render: (_a, v) => [{
           type: 'text',
-          text: `${v.header}\n排行：${v.category || '全部'} · 按${v.metricLabel}\n${v.rows.map((r, i) => `${i + 1}.${line(r, new Set(v.installed)).slice(1)}`).join('\n')}\n\n${NOTE}`,
+          text: `${v.header}\n排行：${v.category || '全部'} · 按${v.metricLabel}\n${v.rows.map((r, i) => `${i + 1}.${line(r).slice(1)}`).join('\n')}\n\n${NOTE}`,
         }],
       },
       async execute(args) {
@@ -233,8 +257,7 @@ export async function buildToolDefinitions(deps = {}) {
         const metric = LABELS[args.metric] ? args.metric : 'baseline'
         const category = CATS.includes(args.category) ? args.category : null
         const rows = rank(cat, { metric, category, limit: clampInt(args.limit, 1, 30, 10) }).map(fromRec)
-        const have = installed()
-        return plain({ header: header(cat), metric, metricLabel: LABELS[metric], category, rows, installed: rows.map(r => r.name).filter(n => have.has(n)) })
+        return plain({ header: header(cat), metric, metricLabel: LABELS[metric], category, rows: annotate(rows, cat, installed()) })
       },
     }),
   ]

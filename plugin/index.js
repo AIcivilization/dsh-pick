@@ -1,14 +1,15 @@
 // plugin/index.js — dsh-pick 的 DSH 插件（宿主端）
 //
 // 只做一件事：把「选插件」面板挂到 dsh 自己的 webServer 上，让 dsh 设置页里能看，
-// 顺便给面板提供数据接口。数据全部来自本包 data/catalog.json，不外传。
+// 顺便给面板提供数据接口。数据来自随包自带的 data/catalog.json，或每天自动更新下来的那份
+// （~/.dsh/dsh-pick/catalog.json，见 lib/remote.js），用新的那份；只读公开的 npm 数据，不外传任何东西。
 //
 // 路由（都走 dsh 的登录校验，所以先过 dsh 自己的鉴权）：
 //   GET  /api-dsh-pick/panel        面板 HTML
 //   GET  /api-dsh-pick/panel.js     面板逻辑
 //   GET  /api-dsh-pick/words.js     搜索词典
 //   GET  /api-dsh-pick/catalog.json 目录（含排名、链接、去噪指标）
-//   GET  /api-dsh-pick/meta         目录概要（更新时间、包数）
+//   GET  /api-dsh-pick/meta         目录概要（更新时间、包数、来源）
 //   GET  /api-dsh-pick/update       本插件版本 + npm 上的最新版本
 //   POST /api-dsh-pick/update       更新到 npm 最新版（交给 DSH 的插件管理器）
 //   POST /api-dsh-pick/uninstall    从 DSH 卸载本插件
@@ -23,6 +24,8 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { registerTools } from './tools.js'
+import { loadCatalog } from '../lib/engine.js'
+import { refreshCatalog, remoteState, CHECK_EVERY_MS } from '../lib/remote.js'
 
 /** 本包根目录：插件就是完整的 dsh-pick 包 */
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -38,7 +41,6 @@ const FILES = {
   '/panel': 'web/panel.html',
   '/panel.js': 'web/panel.js',
   '/words.js': 'lib/words.js',
-  '/catalog.json': 'data/catalog.json',
 }
 
 async function readPkgJson() {
@@ -167,20 +169,27 @@ function isSafePost(req) {
   }
 }
 
-/** 目录概要：给面板顶部显示「更新时间 / 包数」用 */
+/** 目录概要：给面板顶部、设置页显示「更新时间 / 包数 / 来源」用 */
 async function catalogMeta() {
-  try {
-    const cat = JSON.parse(await readFile(join(PKG_ROOT, 'data', 'catalog.json'), 'utf8'))
-    const packages = cat.packages || {}
-    return {
-      asOf: cat.asOf || null,
-      anchor: cat.anchor || null,
-      total: cat.total || Object.keys(packages).length,
-      deepCount: Object.values(packages).filter(p => p && p.deep).length,
-    }
-  } catch {
-    return { asOf: null, anchor: null, total: 0, deepCount: 0 }
+  const cat = await loadCatalog()
+  const packages = cat.packages || {}
+  const state = await remoteState()
+  return {
+    asOf: cat.asOf || null,
+    anchor: cat.anchor || null,
+    total: cat.total || Object.keys(packages).length,
+    deepCount: Object.values(packages).filter(p => p && p.deep).length,
+    source: cat.source || 'bundled',
+    checkedAt: state.checkedAt || null,
   }
+}
+
+/** 归一化后的目录（带排名、npm / GitHub 链接）序列化一次就够：目录对象换了才重算 */
+let catalogText = { of: null, text: '' }
+async function catalogJson() {
+  const cat = await loadCatalog()
+  if (catalogText.of !== cat) catalogText = { of: cat, text: JSON.stringify(cat) }
+  return catalogText.text
 }
 
 export const name = 'dsh-pick'
@@ -201,6 +210,16 @@ export function apply(ctx) {
   try {
     profile = ctx.get && ctx.get('profileContext') && ctx.get('profileContext').name
   } catch { profile = undefined }
+
+  // 每日更新的目录：启动时查一次，之后每 6 小时查一次（查不到就继续用手上的）
+  const refresh = () => refreshCatalog().catch(() => {})
+  const startTimer = setTimeout(refresh, 5000) // 别和 DSH 启动抢网络
+  const timer = setInterval(refresh, CHECK_EVERY_MS)
+  if (timer.unref) timer.unref()
+  if (startTimer.unref) startTimer.unref()
+  const stop = () => { clearTimeout(startTimer); clearInterval(timer) }
+  if (typeof ctx.effect === 'function') ctx.effect(() => stop)
+  else if (typeof ctx.on === 'function') ctx.on('dispose', stop)
 
   // AI 工具：DSH 有 tools 服务才注册（可选依赖，没有也不影响面板）
   ctx.inject(['tools'], (toolsCtx) => {
@@ -239,6 +258,16 @@ export function apply(ctx) {
         },
       }))
     }
+
+    // 目录（归一化后的：带排名与链接；用新的那份）
+    track(ws.register({
+      kind: 'exact',
+      path: '/api-dsh-pick/catalog.json',
+      handler: async (req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+        res.end(await catalogJson())
+      },
+    }))
 
     // 目录概要
     track(ws.register({
@@ -333,12 +362,12 @@ export function apply(ctx) {
         if (!isSafePost(req)) return sendJson(res, 403, { ok: false, message: '只接受本页面发出的请求' })
         const { name } = await readJsonBody(req)
         if (typeof name !== 'string' || !NAME_RE.test(name)) return sendJson(res, 400, { ok: false, message: '包名不对' })
-        let inCatalog = false
-        try {
-          const cat = JSON.parse(await readFile(join(PKG_ROOT, 'data', 'catalog.json'), 'utf8'))
-          inCatalog = Boolean(cat.packages && cat.packages[name])
-        } catch { /* 目录读不到就当不在 */ }
-        if (!inCatalog) return sendJson(res, 400, { ok: false, message: `${name} 不在 DSH 插件目录里，这里不装` })
+        const rec = (await loadCatalog()).packages[name]
+        if (!rec) return sendJson(res, 400, { ok: false, message: `${name} 不在 DSH 插件目录里，这里不装` })
+        // 没声明 dsh.bundle 的包，DSH 一定拒绝安装：不白跑一趟 pnpm
+        if (rec.inst && rec.inst.b === false) {
+          return sendJson(res, 400, { ok: false, message: `${name} 没有声明 dsh.bundle，DSH 不能把它当插件安装` })
+        }
         const command = pluginCommand(`add ${name}`, profile)
         if (!pluginManager || typeof pluginManager.installBundle !== 'function') {
           return sendJson(res, 200, { ok: false, message: '这个版本的 DSH 不能在这里装插件，请在终端执行命令', command })
