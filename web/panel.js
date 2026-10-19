@@ -251,15 +251,42 @@ function rankText(rec) {
 }
 
 const GH_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.99 7.99 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>'
-const NPM_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 0h16v16H0V0zm3.2 12.8V3.2h2.4v9.6H3.2zm3.6 0V3.2h5.6v6.4H8.8v3.2H6.8zM8.8 6.4v3.2h1.6V6.4H8.8z"/></svg>'
+// npm 的方块标志（中间一个 n）：缩到 13px 也认得出；颜色用 npm 的红
+const NPM_SVG = '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="#cb3837" d="M0 0h16v16H0z"/><path fill="#fff" d="M3 3h10v10h-2.5V5.5H8V13H3z"/></svg>'
 
-function linkBtns(rec) {
+/**
+ * 外链按钮。icon = 只要图标（排行榜这种窄列）：悬停看得到完整地址
+ */
+function linkBtns(rec, { icon = false } = {}) {
+  const npm = rec.npmUrl || ('https://www.npmjs.com/package/' + rec.n)
+  const cls = icon ? 'lk ic' : 'lk'
   let h = ''
   if (rec.ghUrl) {
-    h += `<a class="lk" href="${esc(rec.ghUrl)}" target="_blank" rel="noopener" title="GitHub：${esc(rec.ghUrl)}">${GH_SVG}GitHub</a>`
+    h += `<a class="${cls}" href="${esc(rec.ghUrl)}" target="_blank" rel="noopener" title="GitHub：${esc(rec.ghUrl)}" aria-label="GitHub">${GH_SVG}${icon ? '' : 'GitHub'}</a>`
   }
-  h += `<a class="lk" href="${esc(rec.npmUrl || ('https://www.npmjs.com/package/' + rec.n))}" target="_blank" rel="noopener" title="npm：${esc(rec.npmUrl || rec.n)}">${NPM_SVG}npm</a>`
-  return h || '<span style="font-size:11px;color:var(--t3)">无外链</span>'
+  h += `<a class="${cls}" href="${esc(npm)}" target="_blank" rel="noopener" title="npm：${esc(npm)}" aria-label="npm">${NPM_SVG}${icon ? '' : 'npm'}</a>`
+  return h
+}
+
+/** 最近一次发版：今天 / 昨天 / N天前 / N个月前 */
+function ageText(age) {
+  if (age == null) return '—'
+  if (age <= 0) return '今天'
+  if (age === 1) return '昨天'
+  if (age < 60) return `${age}天前`
+  return `${Math.round(age / 30)}个月前`
+}
+
+/**
+ * 「更新」一格：上面最近一次发版，下面小字写版本节奏。两行都不折行，
+ * 比分成两列（窄栏里每列都被挤成「8 / 天 / 前」三行）省地方也整齐。超过 90 天没发版用提醒色
+ */
+function maintCell(d) {
+  if (!d) return '<td class="r mt">—</td>'
+  const stale = d.age != null && d.age > 90
+  const cad = d.cadence == null ? '' : `<div class="sub">${d.cadence}天/版</div>`
+  return `<td class="r mt" title="最近一次发版 ${d.lastRelease || ''}${d.cadence == null ? '' : ` · 平均 ${d.cadence} 天发一个版本`}">` +
+    `<div${stale ? ' class="stale"' : ''}>${ageText(d.age)}</div>${cad}</td>`
 }
 
 /* ---------------- 搜索（与 lib/engine.js 共用同一份词典 lib/words.js） --------------- */
@@ -564,9 +591,8 @@ function renderRank() {
       `<td class="r"><b>${num(val(r))}</b></td>` +
       `<td class="r">${num(r.w)}</td>` +
       `<td class="r ${g === null ? '' : (g >= 0 ? 'up' : 'down')}">${pct(g)}</td>` +
-      `<td class="r">${d && d.cadence !== null ? d.cadence + ' 天' : '—'}</td>` +
-      `<td class="r">${d ? d.age + ' 天前' : '—'}</td>` +
-      `<td style="white-space:nowrap">${linkBtns(r)}</td>` +
+      maintCell(d) +
+      `<td class="lks">${linkBtns(r, { icon: true })}</td>` +
       `</tr>`
   }).join('')
 }

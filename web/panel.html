@@ -192,7 +192,15 @@ table.rank th{text-align:left;font-size:11px;color:var(--t3);font-weight:600;pad
 table.rank td{padding:9px 10px;border-bottom:1px solid var(--soft);color:var(--t2);font-variant-numeric:tabular-nums}
 table.rank tbody tr:hover td{background:var(--row-hover)}
 table.rank td.nm{color:var(--text);font-weight:650;font-variant-numeric:normal}
-td.r,th.r{text-align:right}
+td.r,th.r{text-align:right;white-space:nowrap}
+/* 「更新」一格：最近发版 + 小字节奏 */
+table.rank td.mt{line-height:1.35}
+table.rank td.mt .sub{font-size:10.5px;color:var(--t3)}
+table.rank td.mt .stale{color:var(--warn-text);font-weight:600}
+/* 只有图标的外链（排行榜） */
+table.rank td.lks{white-space:nowrap;width:1%}
+.lk.ic{padding:0;width:24px;height:22px;justify-content:center;gap:0}
+.lk.ic + .lk.ic{margin-left:4px}
 td.up{color:var(--ok);font-weight:600}
 td.down{color:var(--bad);font-weight:600}
 .catpill{font-size:10.5px;background:var(--soft);color:var(--t2);border-radius:20px;padding:2px 8px;white-space:nowrap}
@@ -347,7 +355,7 @@ td.down{color:var(--bad);font-weight:600}
           <thead><tr>
             <th style="width:44px">#</th><th>插件</th><th>分类</th>
             <th class="r">基线</th><th class="r">周下载</th><th class="r">环比</th>
-            <th class="r">版本节奏</th><th class="r">最近更新</th><th>链接</th>
+            <th class="r" title="最近一次发版 · 平均几天发一个版本">更新</th><th></th>
           </tr></thead>
           <tbody id="rankBody"></tbody>
         </table>
