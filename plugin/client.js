@@ -59,6 +59,36 @@ window.__ModuleLoader__.load({
       }, children)
     }
 
+    /** 一条给用户自己在终端执行的命令：等宽显示，旁边一个「复制」 */
+    function CommandLine({ command }) {
+      const [copied, setCopied] = useState(false)
+      const copy = async () => {
+        try {
+          await navigator.clipboard.writeText(command)
+        } catch {
+          // 剪贴板不让用（非安全上下文等）：退回到选中后 execCommand
+          const ta = document.createElement('textarea')
+          ta.value = command
+          ta.style.position = 'fixed'
+          ta.style.opacity = '0'
+          document.body.appendChild(ta)
+          ta.select()
+          try { document.execCommand('copy') } catch { /* 实在不行用户还能手动选 */ }
+          ta.remove()
+        }
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+      return h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' } },
+        h('code', {
+          style: {
+            flex: '1 1 auto', minWidth: 0, padding: '4px 8px', borderRadius: 6, fontSize: 12, color: C.text,
+            border: '1px solid ' + C.border, userSelect: 'all', overflowWrap: 'anywhere',
+          },
+        }, command),
+        h(Btn, { onClick: copy }, copied ? L('已复制', 'Copied') : L('复制', 'Copy')))
+    }
+
     /** 标题行：dsh-pick · 版本号 · 更新 ……（最右）卸载 */
     function HeaderBar() {
       const [info, setInfo] = useState(null)
@@ -132,7 +162,7 @@ window.__ModuleLoader__.load({
         ),
         msg ? h('div', { style: { fontSize: 12, color: C.danger, marginTop: 6, lineHeight: 1.6 } },
           msg.text,
-          msg.command ? h('code', { style: { display: 'block', marginTop: 4, color: C.text, userSelect: 'all' } }, msg.command) : null,
+          msg.command ? h(CommandLine, { command: msg.command }) : null,
         ) : null,
       )
     }

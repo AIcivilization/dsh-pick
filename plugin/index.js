@@ -95,6 +95,20 @@ function pluginCommand(args, profile) {
 }
 
 /** 插件管理器的失败结果 → 一行人话（取诊断输出的最后几行） */
+/** 插件管理器失败结果里的错误码（没失败返回空串） */
+function managerCode(result) {
+  if (!(result && (result.application === 'failed' || result.application === 'cancelled' || result.error))) return ''
+  return (result.error && result.error.code) || result.application || 'failed'
+}
+
+/**
+ * 官方桌面版（0.2.1-rc.2 实测）的插件管理器不能在运行中升级已装的插件：installBundle 一律答
+ * already-installed（插件市场的「更新」也栽在这里）。只能退出 DSH、在终端用 dsh plugin 装
+ */
+const ALREADY_INSTALLED_HINT =
+  '这个版本的 DSH 不能在运行中升级已装的插件。请完全退出 DSH（Mac 上按 Cmd+Q，不是关窗口），' +
+  '在终端执行下面的命令，再重新打开 DSH。如果提示版本太新（发布不满 1 天），过一天再执行。'
+
 function managerError(result) {
   if (!(result && (result.application === 'failed' || result.application === 'cancelled' || result.error))) return ''
   const code = (result.error && result.error.code) || result.application || 'failed'
@@ -265,10 +279,12 @@ export function apply(ctx) {
         }
         try {
           const result = await pluginManager.installBundle(`${PACKAGE}@${latest}`, { enabled: true })
+          if (managerCode(result) === 'already-installed') return sendJson(res, 200, { ok: false, message: ALREADY_INSTALLED_HINT, command })
           const err = managerError(result)
           if (err) return sendJson(res, 200, { ok: false, message: `更新失败（${err}）`, command })
           return sendJson(res, 200, { ok: true, version: latest })
         } catch (e) {
+          if (e && e.code === 'already-installed') return sendJson(res, 200, { ok: false, message: ALREADY_INSTALLED_HINT, command })
           return sendJson(res, 200, { ok: false, message: `更新失败：${e.message}`, command })
         }
       },
