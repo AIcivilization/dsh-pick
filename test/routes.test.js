@@ -134,3 +134,12 @@ test('实时数据：去 npm 查监控列表里的包', async () => {
   const bad = await realFetch(base + 'live?names=')
   assert.equal(bad.status, 400)
 })
+
+test('更新失败时「完全退出 DSH」按系统给做法', async () => {
+  const { alreadyInstalledHint } = await import('../plugin/index.js')
+  assert.match(alreadyInstalledHint('darwin'), /Cmd\+Q/)
+  assert.match(alreadyInstalledHint('win32'), /托盘图标上右键 → 退出/)
+  assert.match(alreadyInstalledHint('win32'), /PowerShell/)
+  assert.doesNotMatch(alreadyInstalledHint('win32'), /Cmd/)
+  assert.match(alreadyInstalledHint('linux'), /进程已经结束/)
+})

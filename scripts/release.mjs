@@ -29,8 +29,11 @@ const fail = (text) => {
 }
 const step = (text) => console.log(`\n▸ ${text}`)
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim()
+// Windows 上的 npm 是 npm.cmd：新版 Node 不许不经 shell 直接起 .cmd（会报 EINVAL / ENOENT）。
+// 这里传给 npm 的参数都是固定的短词和版本号，没有空格和引号，走 shell 不会被拆错
+const viaShell = cmd => cmd === 'npm' && process.platform === 'win32'
 const run = (cmd, a) => {
-  const r = spawnSync(cmd, a, { cwd: ROOT, stdio: 'inherit' })
+  const r = spawnSync(cmd, a, { cwd: ROOT, stdio: 'inherit', shell: viaShell(cmd) })
   if (r.status !== 0) fail(`${cmd} ${a.join(' ')} 失败（退出码 ${r.status}）`)
 }
 
@@ -57,9 +60,9 @@ if (git('status', '--porcelain')) fail('有没提交的改动，先提交或收�
 git('fetch', '-q', 'origin', 'main', '--tags')
 if (git('rev-list', '--count', 'HEAD..origin/main') !== '0') fail('本地落后于 GitHub 上的 main，先 git pull')
 if (git('tag', '-l', tag)) fail(`标签 ${tag} 已经存在`)
-const onNpm = spawnSync('npm', ['view', `${pkg.name}@${next}`, 'version'], { cwd: ROOT, encoding: 'utf8' })
+const onNpm = spawnSync('npm', ['view', `${pkg.name}@${next}`, 'version'], { cwd: ROOT, encoding: 'utf8', shell: viaShell('npm') })
 if (onNpm.stdout.trim() === next) fail(`npm 上已经有 ${next} 了（npm 不许覆盖已发布的版本）`)
-const npmUser = spawnSync('npm', ['whoami'], { cwd: ROOT, encoding: 'utf8' })
+const npmUser = spawnSync('npm', ['whoami'], { cwd: ROOT, encoding: 'utf8', shell: viaShell('npm') })
 console.log(npmUser.status === 0 ? `  npm 账号：${npmUser.stdout.trim()}` : '  npm 还没登录：发布时会打开浏览器让你确认')
 
 step('跑测试')

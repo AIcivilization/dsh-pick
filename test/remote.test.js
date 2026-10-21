@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, mkdir, writeFile } from 'node:fs/promises'
+import { readFile, mkdir, writeFile, readdir, rename } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
-import { refreshCatalog, validCatalog, MIRRORS } from '../lib/remote.js'
+import { refreshCatalog, validCatalog, writeAtomic, MIRRORS } from '../lib/remote.js'
 import { cachePath, loadCatalog, reloadCatalog } from '../lib/engine.js'
 import { makeCatalog, tempHome, fakeFetch } from './fixtures.js'
 
@@ -76,4 +76,32 @@ test('下载到坏文件：不写、不换，下次再试', async () => {
   await assert.rejects(readFile(cachePath(env), 'utf8'))
   // 没记 checkedAt：下一轮还会再查
   await assert.rejects(readFile(join(dirname(cachePath(env)), 'remote.json'), 'utf8'))
+})
+
+test('替换文件被占用（Windows 常见）：退避重试，成功就好', async () => {
+  const dir = await tempHome()
+  const file = join(dir, 'a.json')
+  let calls = 0
+  const flaky = async (from, to) => {
+    if (++calls < 3) throw Object.assign(new Error('busy'), { code: 'EPERM' })
+    return rename(from, to)
+  }
+  await writeAtomic(file, '{"ok":1}', { renameImpl: flaky, wait: 1 })
+  assert.equal(calls, 3)
+  assert.equal(await readFile(file, 'utf8'), '{"ok":1}')
+})
+
+test('一直被占用：放弃，删掉临时文件，把错抛出去', async () => {
+  const dir = await tempHome()
+  const busy = async () => { throw Object.assign(new Error('busy'), { code: 'EBUSY' }) }
+  await assert.rejects(writeAtomic(join(dir, 'a.json'), 'x', { renameImpl: busy, wait: 1, tries: 3 }), /busy/)
+  assert.deepEqual(await readdir(dir), []) // 没留下 .tmp
+})
+
+test('别的错误（比如磁盘满）不重试', async () => {
+  const dir = await tempHome()
+  let calls = 0
+  const full = async () => { calls++; throw Object.assign(new Error('full'), { code: 'ENOSPC' }) }
+  await assert.rejects(writeAtomic(join(dir, 'a.json'), 'x', { renameImpl: full, wait: 1 }), /full/)
+  assert.equal(calls, 1)
 })

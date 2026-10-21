@@ -108,9 +108,15 @@ function managerCode(result) {
  * 官方桌面版（0.2.1-rc.2 实测）的插件管理器不能在运行中升级已装的插件：installBundle 一律答
  * already-installed（插件市场的「更新」也栽在这里）。只能退出 DSH、在终端用 dsh plugin 装
  */
-const ALREADY_INSTALLED_HINT =
-  '这个版本的 DSH 不能在运行中升级已装的插件。请完全退出 DSH（Mac 上按 Cmd+Q，不是关窗口），' +
-  '在终端执行下面的命令，再重新打开 DSH。如果提示版本太新（发布不满 1 天），过一天再执行。'
+export function alreadyInstalledHint(platform = process.platform) {
+  // 「完全退出」各系统做法不一样：关窗口不算，DSH 还在后台跑
+  const quit = platform === 'darwin' ? '按 Cmd+Q，不是关窗口'
+    : platform === 'win32' ? '在任务栏右下角的托盘图标上右键 → 退出，不是关窗口'
+      : '关掉所有窗口，并确认 DSH 进程已经结束'
+  const terminal = platform === 'win32' ? 'PowerShell 或命令提示符' : '终端'
+  return `这个版本的 DSH 不能在运行中升级已装的插件。请完全退出 DSH（${quit}），` +
+    `在${terminal}里执行下面的命令，再重新打开 DSH。如果提示版本太新（发布不满 1 天），过一天再执行。`
+}
 
 function managerError(result) {
   if (!(result && (result.application === 'failed' || result.application === 'cancelled' || result.error))) return ''
@@ -315,12 +321,12 @@ export function apply(ctx) {
         }
         try {
           const result = await pluginManager.installBundle(`${PACKAGE}@${latest}`, { enabled: true })
-          if (managerCode(result) === 'already-installed') return sendJson(res, 200, { ok: false, message: ALREADY_INSTALLED_HINT, command })
+          if (managerCode(result) === 'already-installed') return sendJson(res, 200, { ok: false, message: alreadyInstalledHint(), command })
           const err = managerError(result)
           if (err) return sendJson(res, 200, { ok: false, message: `更新失败（${err}）`, command })
           return sendJson(res, 200, { ok: true, version: latest })
         } catch (e) {
-          if (e && e.code === 'already-installed') return sendJson(res, 200, { ok: false, message: ALREADY_INSTALLED_HINT, command })
+          if (e && e.code === 'already-installed') return sendJson(res, 200, { ok: false, message: alreadyInstalledHint(), command })
           return sendJson(res, 200, { ok: false, message: `更新失败：${e.message}`, command })
         }
       },
