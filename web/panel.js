@@ -7,6 +7,7 @@ const IS_PLUGIN = location.pathname.indexOf('/api-dsh-pick') === 0
 const P = {
   words: IS_PLUGIN ? '/api-dsh-pick/words.js' : '/lib/words.js',
   catalog: IS_PLUGIN ? '/api-dsh-pick/catalog.json' : '/data/catalog.json',
+  live: IS_PLUGIN ? '/api-dsh-pick/live' : '/live',
 }
 
 // 嵌在 DSH 里（同源 iframe）才有「+AI」和「安装」：消息交给外层（plugin/client.js）写进当前对话；
@@ -110,9 +111,10 @@ function askVerdict() {
 }
 
 function askWatch() {
-  const rows = watch().map(n => CAT.packages[n]).filter(Boolean)
+  const rows = watch().map(watchRec).filter(Boolean)
+  const live = LIVE.at ? `（npm 实时数据，${new Date(LIVE.at).toLocaleString()} 刷新；下载量含 CI / 镜像流量，不等于用户数）` : dataAsOf()
   return [
-    `帮我看看我关注的这些 DSH 插件最近怎么样${dataAsOf()}：`,
+    `帮我看看我关注的这些 DSH 插件最近怎么样${live}：`,
     ...rows.map(r => `- ${r.n}（${r.cat}）：${factLine(r)}`),
     '',
     `谁在涨、谁停更了、有没有该换掉的？${TAIL}`,
@@ -360,8 +362,8 @@ function bindEvents() {
     b.addEventListener('click', () => {
       document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b))
       const t = b.dataset.tab
-      $('#tab-pick').classList.toggle('hidden', t !== 'pick')
-      $('#tab-watch').classList.toggle('hidden', t !== 'watch')
+      // 每个标签一块内容：tab-pick / tab-rank / tab-watch
+      document.querySelectorAll('#tabs button').forEach(x => $('#tab-' + x.dataset.tab).classList.toggle('hidden', x.dataset.tab !== t))
     })
   })
 
@@ -376,6 +378,7 @@ function bindEvents() {
   $('#aiCands').addEventListener('click', () => cands.length && askAI(askCands()))
   $('#aiVerdict').addEventListener('click', () => picked.length >= 2 && askAI(askVerdict()))
   $('#aiWatch').addEventListener('click', () => watch().length && askAI(askWatch()))
+  $('#btnWatchRefresh').addEventListener('click', refreshWatch)
 
   $('#btnExport').addEventListener('click', exportHtml)
   $('#btnWatch').addEventListener('click', addPickedToWatch)
@@ -611,9 +614,62 @@ function addPickedToWatch() {
   alert('已加入我的监控（' + picked.join('、') + '）')
 }
 
+/* 刷新：去 npm 实时查监控列表里的包。结果存本地，下次打开还看得到上次刷新的数 */
+const LIVE_KEY = 'dsh-pick-watch-live-v1'
+let LIVE = (() => {
+  try { return JSON.parse(localStorage.getItem(LIVE_KEY)) || { at: null, rows: {} } } catch { return { at: null, rows: {} } }
+})()
+
+/**
+ * 监控卡片用的数据：有实时数据就用实时的（字段换成目录的短名，后面的代码不用分两套），
+ * 否则用目录里的。目录里没有、也没刷新过的返回 null
+ */
+function watchRec(n) {
+  const base = CAT.packages[n]
+  const live = LIVE.rows[n]
+  if (!live || !live.found) return base || null
+  const d = live.deep
+  return {
+    ...(base || { n, cat: '（目录外）' }),
+    n,
+    v: live.latest || (base && base.v),
+    w: live.weekly,
+    m: live.monthly,
+    deep: d ? { base: d.baseline, growth: d.growth, cadence: d.cadence, age: d.ageDays, lastRelease: d.lastRelease, versions: d.versions, s: d.score } : null,
+    live: true,
+    catalogW: base ? base.w : null,
+  }
+}
+
+async function refreshWatch() {
+  const list = watch()
+  if (!list.length) return
+  const btn = $('#btnWatchRefresh')
+  btn.disabled = true
+  btn.textContent = '刷新中…'
+  try {
+    const r = await fetch(`${P.live}?names=${encodeURIComponent(list.join(','))}`, { cache: 'no-store' })
+    const j = await r.json()
+    if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status)
+    LIVE = { at: j.at, anchor: j.anchor, rows: Object.fromEntries(j.rows.map(x => [x.name, x])) }
+    try { localStorage.setItem(LIVE_KEY, JSON.stringify(LIVE)) } catch { /* 存不下就只这次有效 */ }
+    const miss = j.rows.filter(x => !x.found).map(x => x.name)
+    toast(miss.length ? `已刷新；npm 上查不到：${miss.join('、')}` : `已刷新 ${j.rows.length} 个插件`)
+  } catch (e) {
+    toast('刷新失败：' + e.message + '（检查网络后再试）')
+  }
+  btn.disabled = false
+  btn.textContent = '↻ 刷新'
+  renderWatch()
+}
+
 function renderWatch() {
   const list = watch()
   $('#watchCount').textContent = list.length ? ` (${list.length})` : ''
+  $('#btnWatchRefresh').classList.toggle('hidden', !list.length)
+  $('#watchAsOf').innerHTML = !list.length ? ''
+    : LIVE.at ? `<b>实时数据</b>，${esc(new Date(LIVE.at).toLocaleString())} 刷新（npm 统计截止 ${esc(LIVE.anchor || '—')}）。`
+      : `现在显示的是目录数据（截止 <b>${esc(CAT.anchor)}</b>）。`
   const host = $('#watchList')
   if (!list.length) {
     host.innerHTML = '<div class="empty">还没有监控的插件。在「选插件」里挑几个，点「加入我的监控」。</div>'
@@ -622,16 +678,24 @@ function renderWatch() {
   }
 
   host.innerHTML = list.map(n => {
-    const r = CAT.packages[n]
-    if (!r) return `<div class="mon"><span class="nm">${esc(n)}</span><span style="color:var(--t3);font-size:11.5px">不在目录中</span><button class="x" data-rm="${esc(n)}">×</button></div>`
+    const r = watchRec(n)
+    if (!r) return `<div class="mon"><span class="nm">${esc(n)}</span><span style="color:var(--t3);font-size:11.5px">不在目录中，点「刷新」去 npm 查</span><button class="x" data-rm="${esc(n)}">×</button></div>`
     const d = r.deep
+    // 和目录数据比，周下载涨了还是跌了（只在刷新过、差得明显时标）
+    let delta = ''
+    if (r.live && r.catalogW) {
+      const ch = (r.w - r.catalogW) / Math.max(r.catalogW, 1)
+      if (Math.abs(ch) >= 0.05) delta = `<span class="delta ${ch > 0 ? 'up' : 'down'}" title="和目录数据（截止 ${esc(CAT.anchor)}）相比">${ch > 0 ? '↑' : '↓'}${Math.round(Math.abs(ch) * 100)}%</span>`
+    }
     return `<div class="mon">` +
-      `<span class="nm">${esc(n)}</span>` +
+      `<span class="nm">${esc(n)}${r.v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` : ''}</span>` +
+      (r.live ? '<span class="live" title="刚从 npm 查的">实时</span>' : '') +
       `<span class="mrank">${rankText(r)}</span>` +
       `<span style="font-size:11.5px;color:var(--t3)">${esc(r.cat)}</span>` +
-      `<span style="font-size:12px"><b>${num(r.w)}</b>/周</span>` +
+      `<span style="font-size:12px"><b>${num(r.w)}</b>/周${delta}</span>` +
       `<span style="font-size:12px;color:var(--t2)">基线 ${d ? num(d.base) : '—'}</span>` +
-      `<span class="mlinks">${linkBtns(r)}</span>` +
+      `<span style="font-size:12px;color:var(--t2)">${d ? ageText(d.age) + '发版' : ''}</span>` +
+      `<span class="mlinks">${linkBtns(r, { icon: true })}</span>` +
       `<button class="x" data-rm="${esc(n)}">×</button></div>`
   }).join('')
 
@@ -639,12 +703,12 @@ function renderWatch() {
     b.addEventListener('click', () => saveWatch(watch().filter(x => x !== b.dataset.rm)) || renderWatch()))
 
   // 对数刻度横条图
-  const rows = list.map(n => CAT.packages[n]).filter(Boolean)
+  const rows = list.map(watchRec).filter(Boolean)
   const max = Math.max(...rows.map(r => r.w), 1)
   $('#watchChart').innerHTML = rows.map((r, i) => {
     const w = Math.max(Math.log10(r.w + 1) / Math.log10(max + 1) * 100, 1.5)
-    return `<div class="hrow" style="display:grid;grid-template-columns:210px 1fr 78px;align-items:center;gap:12px;padding:6px 0">` +
-      `<div style="font-size:12px;color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(i)};margin-right:6px"></i>${esc(r.n)} <span style="color:var(--t3);font-size:10px">#${num(r.rank)}</span></div>` +
+    return `<div class="hrow" style="display:grid;grid-template-columns:minmax(80px,38%) 1fr auto;align-items:center;gap:10px;padding:6px 0">` +
+      `<div style="font-size:12px;color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(i)};margin-right:6px"></i>${esc(r.n)}${r.rank ? ` <span style="color:var(--t3);font-size:10px">#${num(r.rank)}</span>` : ''}</div>` +
       `<div style="height:14px;background:var(--soft);border-radius:4px"><div style="height:100%;width:${w}%;background:${colorOf(i)};border-radius:4px"></div></div>` +
       `<div style="font-size:12px;font-weight:650;text-align:right">${num(r.w)}</div></div>`
   }).join('')

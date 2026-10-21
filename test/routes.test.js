@@ -10,9 +10,20 @@ reloadCatalog(makeCatalog())
 
 // npm 上的「最新版」固定成 9.9.9；本地请求照常走
 const realFetch = globalThis.fetch
-globalThis.fetch = async (url, opt) => (/registry\.|npmmirror/.test(String(url))
-  ? new Response(JSON.stringify({ version: '9.9.9' }))
-  : realFetch(url, opt))
+// 下载量接口（实时刷新用）：截止日 2026-10-18，30 天每天 100 次
+const DAYS = Array.from({ length: 30 }, (_, i) => ({ day: `d${i}`, downloads: 100 }))
+globalThis.fetch = async (url, opt) => {
+  const u = String(url)
+  if (u.includes('api.npmjs.org/downloads/point/last-day')) return new Response(JSON.stringify({ end: '2026-10-18' }))
+  if (u.includes('api.npmjs.org/downloads/range')) return u.includes('no-such-pkg') ? new Response('{}', { status: 404 }) : new Response(JSON.stringify({ downloads: DAYS }))
+  if (u.includes('api.npmjs.org/downloads/point')) return new Response(JSON.stringify({ downloads: 5000 }))
+  if (u.includes('/-/v1/search')) {
+    const objects = u.includes('dsh-mnemon') ? [{ package: { name: 'dsh-mnemon-extra' }, downloads: { weekly: 1 } }, { package: { name: 'dsh-mnemon', version: '1.2.3' }, downloads: { weekly: 9000, monthly: 30000 } }] : []
+    return new Response(JSON.stringify({ objects }))
+  }
+  if (/registry\.|npmmirror/.test(u)) return new Response(JSON.stringify({ version: '9.9.9', 'dist-tags': { latest: '9.9.9' } }))
+  return realFetch(url, opt)
+}
 
 const plugin = (await import('../plugin/index.js')).default
 
@@ -107,4 +118,19 @@ test('卸载交给插件管理器', async () => {
   const r = await post('uninstall')
   assert.equal(r.ok, true)
   assert.deepEqual(pm.calls.at(-1), ['remove', 'dsh-pick'])
+})
+
+test('实时数据：去 npm 查监控列表里的包', async () => {
+  const r = await get('live?names=' + encodeURIComponent('dsh-mnemon,no-such-pkg,../../x'))
+  assert.equal(r.anchor, '2026-10-18')
+  assert.deepEqual(r.rows.map(x => x.name), ['dsh-mnemon', 'no-such-pkg']) // 不合法的名字直接丢掉
+  const m = r.rows[0]
+  assert.equal(m.found, true)
+  assert.equal(m.weekly, 9000) // 周下载用搜索接口的（和目录同一口径），按包名精确匹配
+  assert.equal(m.monthly, 30000)
+  assert.equal(m.latest, '9.9.9')
+  assert.equal(m.daily, undefined) // 30 天日序列不发给界面
+  assert.equal(r.rows[1].found, false)
+  const bad = await realFetch(base + 'live?names=')
+  assert.equal(bad.status, 400)
 })

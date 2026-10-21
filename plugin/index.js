@@ -14,6 +14,7 @@
 //   POST /api-dsh-pick/update       更新到 npm 最新版（交给 DSH 的插件管理器）
 //   POST /api-dsh-pick/uninstall    从 DSH 卸载本插件
 //   GET  /api-dsh-pick/installed    DSH 里已装的插件名（面板的「已安装」标记）
+//   GET  /api-dsh-pick/live?names=a,b  实时查 npm（「我的监控」的刷新，最多 30 个）
 //   POST /api-dsh-pick/install      安装目录里的某个插件 { name }
 //
 // 另外注册 4 个 AI 工具（plugin/tools.js）：对话里的 AI 能自己查目录、比较插件。
@@ -24,7 +25,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { registerTools } from './tools.js'
-import { loadCatalog } from '../lib/engine.js'
+import { loadCatalog, liveStats } from '../lib/engine.js'
 import { refreshCatalog, remoteState, CHECK_EVERY_MS } from '../lib/remote.js'
 
 /** 本包根目录：插件就是完整的 dsh-pick 包 */
@@ -147,6 +148,12 @@ function installedNames(pluginManager) {
 }
 
 const NAME_RE = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i
+
+/** ?names=a,b,c → 合法、去重的包名，最多 30 个（监控列表本身也最多 30 个） */
+export function parseNames(url) {
+  const raw = new URL(url || '/', 'http://x').searchParams.get('names') || ''
+  return [...new Set(raw.split(',').map(s => s.trim()).filter(s => NAME_RE.test(s)))].slice(0, 30)
+}
 
 function sendJson(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -336,6 +343,21 @@ export function apply(ctx) {
           return sendJson(res, 200, { ok: true })
         } catch (e) {
           return sendJson(res, 200, { ok: false, message: `卸载失败：${e.message}`, command })
+        }
+      },
+    }))
+
+    // 实时数据：「我的监控」点刷新时，直接去 npm 查这几个包（只读公开数据）
+    track(ws.register({
+      kind: 'exact',
+      path: '/api-dsh-pick/live',
+      handler: async (req, res) => {
+        const names = parseNames(req.url)
+        if (!names.length) return sendJson(res, 400, { error: '没有合法的包名' })
+        try {
+          sendJson(res, 200, await liveStats(names))
+        } catch (e) {
+          sendJson(res, 502, { error: `查 npm 失败：${e.message}` })
         }
       },
     }))

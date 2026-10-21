@@ -107,6 +107,13 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 .ai:hover{border-color:color-mix(in srgb,var(--ai) 62%,transparent);
   background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--ai) 28%,transparent))}
 .section h2 .ai{margin-left:auto;font-weight:650}
+.section h2 .h2-acts{margin-left:auto;display:inline-flex;gap:8px;align-items:center}
+.section h2 .h2-acts .ai{margin-left:0}
+.btn.sm{font-size:11.5px;padding:0 10px;height:24px;border-radius:7px}
+.mon .live{font-size:10px;color:var(--ok-text);background:var(--ok-bg);border-radius:5px;padding:1px 5px;white-space:nowrap}
+.mon .delta{font-size:10.5px;margin-left:3px}
+.mon .delta.up{color:var(--ok)}.mon .delta.down{color:var(--bad)}
+#watchAsOf b{color:var(--t2);font-weight:600}
 .inst{appearance:none;font-family:inherit;font-size:10.5px;font-weight:600;border-radius:6px;padding:2px 9px;cursor:pointer;
   border:1px solid var(--accent);background:var(--panel);color:var(--accent);white-space:nowrap}
 .inst:hover{background:var(--accent-bg)}
@@ -340,6 +347,10 @@ td.down{color:var(--bad);font-weight:600}
       </div>
     </div>
 
+  </div>
+
+  <!-- ============ Tab 2：排行榜 ============ -->
+  <div id="tab-rank" class="hidden">
     <div class="section">
       <h2>排行榜</h2>
       <p class="cap">换一种方式发现：按去噪后的指标看整个生态。</p>
@@ -363,11 +374,11 @@ td.down{color:var(--bad);font-weight:600}
     </div>
   </div>
 
-  <!-- ============ Tab 2：监控 ============ -->
+  <!-- ============ Tab 3：监控 ============ -->
   <div id="tab-watch" class="hidden">
     <div class="section">
-      <h2>我的监控<button class="ai hidden" id="aiWatch" title="把监控列表发到对话里，让 AI 看看谁在涨、谁停更了">+AI 看看近况</button></h2>
-      <p class="cap">存在浏览器本地（localStorage），不上传。数据取自目录，目录每天重建一次。</p>
+      <h2>我的监控<span class="h2-acts"><button class="btn ghost sm" id="btnWatchRefresh" title="去 npm 实时查这些插件的最新数据">↻ 刷新</button><button class="ai hidden" id="aiWatch" title="把监控列表发到对话里，让 AI 看看谁在涨、谁停更了">+AI 看看近况</button></span></h2>
+      <p class="cap"><span id="watchAsOf"></span>监控列表存在浏览器本地，不上传。点「刷新」去 npm 查最新：版本号、发版时间是即时的；下载量 npm 大约一天更新一次，日常基线和环比按 npm 下载统计算（滞后约 5 天）。</p>
       <div id="watchList"></div>
     </div>
     <div class="section">
