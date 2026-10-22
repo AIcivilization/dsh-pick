@@ -30,7 +30,8 @@
     "plugin",
     "web",
     "data",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "keywords": [
     "dsh-plugin",

@@ -1,5 +1,10 @@
 # dsh-pick
 
+[![npm version](https://img.shields.io/npm/v/dsh-pick.svg?style=flat-square)](https://www.npmjs.com/package/dsh-pick)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-pick.svg?style=flat-square)](https://www.npmjs.com/package/dsh-pick)
+[![license](https://img.shields.io/npm/l/dsh-pick.svg?style=flat-square)](LICENSE)
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/aicivilization/dsh-pick)
+
 **帮你在 DSH 生态里选对插件。**
 
 说需求 → 找候选 → 多维比较 → 出结论。下载量只是证据，判断才算数。
@@ -7,6 +12,21 @@
 > 定位对比：`dsh-find-plugin` 负责「**找到**」（搜 GitHub 仓库，按 star 排）；
 > `dsh-pick` 负责「**挑对**」（算去噪指标，给首选 / 备选 / 不推荐）。
 > 一个 `find_dsh_plugin`，一个 `pick_plugin`。
+
+---
+
+## 安装
+
+```sh
+dsh plugin --profile web add dsh-pick                        # DSH 插件（推荐）
+npm i -g dsh-pick                                            # 命令行 / 独立网页
+dsh plugin --profile web add github:AIcivilization/dsh-pick  # 源码安装
+```
+
+- **能力分类**：工具与能力（插件选购顾问）
+- **运行要求**：Node.js ≥ 20；DSH web profile（右侧栏面板 + 设置页）
+- **许可证**：[MIT](LICENSE)
+- **数据边界**：只读公开的 npm API 和本仓库的每日目录，不外传任何数据
 
 ---
 
@@ -200,4 +220,13 @@ npm run release -- patch -m "改了什么" --dry-run    # 演练：只检查、�
 
 ## 许可
 
-MIT
+[MIT](LICENSE) · Copyright © 2026 AIcivilization
+
+---
+
+## 收录渠道
+
+- [DSH Plugin Hub（dsh-plugin.org 社区插件市场）](https://dsh-plugin.org/plugins/aicivilization/dsh-pick)
+- [awesome-dsh-plugin 精选列表](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
+- dsh-plugin-shop 插件商店（每日自动收录）
+- 52DSH / tuofangzhe 插件目录（证据分级收录）
