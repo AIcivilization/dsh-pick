@@ -249,7 +249,7 @@ window.__ModuleLoader__.load({
     // 数据口径说明：面板底部原来那段，现在放在设置页
     const DATA_NOTE = () => L(
       '排名按周下载；日常基线已扣掉版本发布日与次日的拉取虚高，比原始下载量更接近真实使用量。' +
-      '下载量含 CI / 镜像 / 爬虫流量，不等于用户数。npm 统计约滞后 5 天。',
+      '下载量含 CI / 镜像 / 爬虫流量，不等于用户数。npm 的每日下载只在一天结束后汇总，最近常晚几天。',
       'Ranks are weekly downloads; daily baseline strips the publish-day spike and is closer to real use. ' +
       'Download counts include CI/mirror/crawler traffic, not real users. npm stats lag about 5 days.')
 

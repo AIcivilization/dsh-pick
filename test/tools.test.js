@@ -59,3 +59,13 @@ test('pick_stats：目录里有去噪指标的直接用，不联网', async () =
   assert.equal(v.rows[0].source, 'catalog')
   assert.equal(v.rows[0].installed, true)
 })
+
+test('GitHub：排行按星标、提交时间；结果里带 GitHub 数据和「已归档」提醒', async () => {
+  const stars = await tool.pick_rank.execute({ metric: 'stars', limit: 2 }, {})
+  assert.deepEqual(stars.rows.map(r => r.name), ['meow-memory', 'dsh-mnemon'])
+  const pushed = await tool.pick_rank.execute({ metric: 'pushed', limit: 1 }, {})
+  assert.equal(pushed.rows[0].name, 'dsh-mnemon')
+  const t = text('pick_rank', {}, stars)
+  assert.match(t, /GitHub ★480 · Fork 30/)
+  assert.match(t, /仓库已归档/)
+})

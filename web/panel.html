@@ -107,6 +107,13 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 .ai:hover{border-color:color-mix(in srgb,var(--ai) 62%,transparent);
   background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--ai) 28%,transparent))}
 .section h2 .ai{margin-left:auto;font-weight:650}
+/* 排行榜：npm 榜 / GitHub 榜 */
+.board{display:inline-flex;gap:2px;background:var(--soft);border-radius:9px;padding:3px;margin:8px 0 6px}
+.board button{appearance:none;border:none;background:transparent;font-family:inherit;font-size:12.5px;font-weight:600;
+  color:var(--t3);padding:6px 14px;border-radius:6px;cursor:pointer}
+.board button.on{background:var(--panel);color:var(--text);box-shadow:0 1px 2px var(--shadow)}
+table.rank td.nm .sub{font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px}
+table.rank td .arch{font-size:10.5px;color:var(--t3);background:var(--soft);border-radius:5px;padding:1px 6px}
 .section h2 .h2-acts{margin-left:auto;display:inline-flex;gap:8px;align-items:center}
 .section h2 .h2-acts .ai{margin-left:0}
 .btn.sm{font-size:11.5px;padding:0 10px;height:24px;border-radius:7px}
@@ -353,21 +360,25 @@ td.down{color:var(--bad);font-weight:600}
   <div id="tab-rank" class="hidden">
     <div class="section">
       <h2>排行榜</h2>
-      <p class="cap">换一种方式发现：按去噪后的指标看整个生态。</p>
+      <div class="board" id="rankBoard">
+        <button data-b="npm" class="on">npm 榜</button>
+        <button data-b="gh">GitHub 榜</button>
+      </div>
+      <p class="cap" id="rankCap"></p>
       <div class="filters" id="rankFilters">
-        <button class="chip on" data-m="base">日常基线</button>
-        <button class="chip" data-m="w">周下载</button>
-        <button class="chip" data-m="growth">增速最快</button>
-        <button class="chip" data-m="s">健康度</button>
+        <button class="chip on" data-board="npm" data-m="base">日常基线</button>
+        <button class="chip" data-board="npm" data-m="w">周下载</button>
+        <button class="chip" data-board="npm" data-m="growth">增速最快</button>
+        <button class="chip" data-board="npm" data-m="s">健康度</button>
+        <button class="chip on hidden" data-board="gh" data-m="gs">星标</button>
+        <button class="chip hidden" data-board="gh" data-m="gp">最近提交</button>
+        <button class="chip hidden" data-board="gh" data-m="gf">Fork</button>
+        <button class="chip hidden" data-board="gh" data-m="gi">讨论最多</button>
         <select id="rankCat"></select>
       </div>
       <div class="tblwrap">
         <table class="rank">
-          <thead><tr>
-            <th style="width:44px">#</th><th>插件</th><th>分类</th>
-            <th class="r">基线</th><th class="r">周下载</th><th class="r">环比</th>
-            <th class="r" title="最近一次发版 · 平均几天发一个版本">更新</th><th></th>
-          </tr></thead>
+          <thead id="rankHead"></thead>
           <tbody id="rankBody"></tbody>
         </table>
       </div>
@@ -378,7 +389,7 @@ td.down{color:var(--bad);font-weight:600}
   <div id="tab-watch" class="hidden">
     <div class="section">
       <h2>我的监控<span class="h2-acts"><button class="btn ghost sm" id="btnWatchRefresh" title="去 npm 实时查这些插件的最新数据">↻ 刷新</button><button class="ai hidden" id="aiWatch" title="把监控列表发到对话里，让 AI 看看谁在涨、谁停更了">+AI 看看近况</button></span></h2>
-      <p class="cap"><span id="watchAsOf"></span>监控列表存在浏览器本地，不上传。点「刷新」去 npm 查最新：版本号、发版时间是即时的；下载量 npm 大约一天更新一次，日常基线和环比按 npm 下载统计算（滞后约 5 天）。</p>
+      <p class="cap"><span id="watchAsOf"></span>监控列表存在浏览器本地，不上传。点「刷新」去 npm 和 GitHub 查最新：版本号、发版时间、GitHub 数据是即时的；周下载 npm 大约一天更新一次；日常基线和环比按 npm 已经出数据的最近 30 天算（npm 只在一天结束后才汇总，最近还常晚几天）。</p>
       <div id="watchList"></div>
     </div>
     <div class="section">

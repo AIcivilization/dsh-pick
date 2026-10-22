@@ -49,8 +49,10 @@ function line(r) {
     r.relevance != null ? `相关度 ${r.relevance}%` : '',
   ].filter(Boolean).join(' · ')
   const desc = r.description ? `\n  ${String(r.description).slice(0, 160)}` : ''
+  const g = r.gh
+  const gh = g ? `\n  GitHub ★${num(g.s)} · Fork ${num(g.f)} · 未关闭 issue/PR ${num(g.i)} · 最近提交 ${g.p || '—'}${g.a ? ' · 已归档' : ''}${g.l ? ` · ${g.l}` : ''}` : ''
   const notes = r.notes && r.notes.length ? `\n  ⚠ ${r.notes.join('；')}` : ''
-  return `- ${parts}\n  ${nums}${desc}${notes}`
+  return `- ${parts}\n  ${nums}${gh}${desc}${notes}`
 }
 
 /**
@@ -72,9 +74,10 @@ export function annotate(rows, cat, have) {
     if (inst && !inst.b) notes.push('没声明 dsh.bundle，DSH 不能把它当插件安装')
     if (inst && inst.p && inst.p !== 'web') notes.push(`这是 ${inst.p} 客户端插件，装进桌面版 / 网页版可能让 DSH 起不来`)
     if (inst && inst.r) notes.push(`声明需要 DSH ${inst.r}`)
+    if (rec.gh && rec.gh.a) notes.push('GitHub 仓库已归档，作者不再维护')
     const same = (installedByCat.get(rec.cat || r.category) || []).filter(n => n !== r.name)
     if (same.length && !have.has(r.name)) notes.push(`你已装了同类插件：${same.join('、')}，功能可能重叠`)
-    return { ...r, installed: have.has(r.name), notes }
+    return { ...r, gh: rec.gh || r.gh || null, installed: have.has(r.name), notes }
   })
 }
 
@@ -127,7 +130,7 @@ export async function buildToolDefinitions(deps = {}) {
   const installed = () => {
     try { return deps.installed ? deps.installed() : new Set() } catch { return new Set() }
   }
-  const header = cat => `目录数据截止 ${cat.anchor || '未知'}（npm 统计约滞后 5 天），共 ${num(cat.total)} 个插件。`
+  const header = cat => `目录数据截止 ${cat.anchor || '未知'}（npm 最近有数据的一天；npm 每日下载只在一天结束后汇总，常晚几天），共 ${num(cat.total)} 个插件。`
   const CATS = allCategories()
 
   return [
@@ -238,9 +241,9 @@ export async function buildToolDefinitions(deps = {}) {
     defineTool({
       name: 'pick_rank',
       description:
-        '插件排行榜：全部或某一类，可按周下载、日常基线、环比增速、健康度排。用户问「哪些插件最火 / 某类里谁最好」时用它。',
+        '插件排行榜：全部或某一类，可按周下载、日常基线、环比增速、健康度、GitHub 星标、GitHub 最近提交排。用户问「哪些插件最火 / 某类里谁最好 / 谁还在维护」时用它。',
       parameters: {
-        metric: { type: 'string', enum: ['weekly', 'baseline', 'growth', 'score'], description: '排序指标，默认 baseline（日常基线，最接近真实使用量）' },
+        metric: { type: 'string', enum: ['weekly', 'baseline', 'growth', 'score', 'stars', 'pushed'], description: '排序指标，默认 baseline（日常基线，最接近真实使用量）；stars = GitHub 星标，pushed = GitHub 最近提交' },
         category: { type: 'string', enum: CATS, description: '只看某一类（可省略）' },
         limit: { type: 'integer', description: '前几名，默认 10，最多 30' },
       },
@@ -253,7 +256,7 @@ export async function buildToolDefinitions(deps = {}) {
       },
       async execute(args) {
         const cat = await loadCatalog()
-        const LABELS = { weekly: '周下载', baseline: '日常基线', growth: '环比增速', score: '健康度' }
+        const LABELS = { weekly: '周下载', baseline: '日常基线', growth: '环比增速', score: '健康度', stars: 'GitHub 星标', pushed: 'GitHub 最近提交' }
         const metric = LABELS[args.metric] ? args.metric : 'baseline'
         const category = CATS.includes(args.category) ? args.category : null
         const rows = rank(cat, { metric, category, limit: clampInt(args.limit, 1, 30, 10) }).map(fromRec)

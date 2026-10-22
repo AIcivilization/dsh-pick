@@ -68,6 +68,7 @@ function factLine(r) {
     d && d.age != null ? `${d.age} 天前更新` : '',
     d ? `健康度 ${d.s}` : '',
     r.rank ? `总榜 #${r.rank}` : '',
+    r.gh ? `GitHub ★${r.gh.s}、Fork ${r.gh.f}、未关闭 issue/PR ${r.gh.i}、最近提交 ${r.gh.p}${r.gh.a ? '（已归档）' : ''}` : '',
   ].filter(Boolean).join(' · ')
 }
 const needLine = () => {
@@ -183,6 +184,8 @@ function installCheck(r) {
     // 已经装不了（没 bundle、终端版）就不说「兼容」：版本对得上不等于装得上，两句放一起让人困惑
     good.push(`兼容你的 DSH${HOST_VERSION ? ' ' + HOST_VERSION : ''}`)
   }
+  if (r.gh && r.gh.a) warn.push('GitHub 仓库已归档，作者不再维护')
+  else if (r.gh && daysSince(r.gh.p) > 180) warn.push(`仓库 ${Math.round(daysSince(r.gh.p) / 30)} 个月没有提交`)
   const same = sameKindInstalled(r)
   if (same.length) warn.push(`你已装同类：${same.join('、')}`)
   return { ok, warn, good }
@@ -322,14 +325,18 @@ async function boot() {
   const deepN = Object.values(CAT.packages).filter(p => p.deep).length
   $('#meta').innerHTML =
     `目录 <b>${num(CAT.total)}</b> 个插件 · 去噪指标 <b>${num(deepN)}</b> 个<br>` +
-    `数据截止 <b>${CAT.anchor}</b>（npm 统计滞后约 5 天）`
+    `数据截止 <b>${CAT.anchor}</b>（npm 最近有数据的一天）`
 
+  const gapNote = CAT.gaps && CAT.gaps.length
+    ? `<br><b>npm 缺数据的日子：</b>${CAT.gaps.map(esc).join('、')}（那几天全 npm 的下载统计都是 0，是 npm 自己没出数据），不参与日常基线和环比的计算。`
+    : ''
   $('#foot').innerHTML =
     `<b>口径：</b>下载量含 CI、镜像、爬虫等非人类流量，不等于用户数；<b>日常基线</b>= 扣掉版本发布日与次日后的每日中位数，比原始下载量更接近真实使用量。<br>` +
     `<b>覆盖范围：</b>npm 上带 <code>dsh-plugin</code> 关键字的 ${num(CAT.total)} 个包；去噪指标只算了周下载 Top ${num(deepN)}。目录每天重建一次，重跑 <code>dsh-pick build</code> 即可。<br>` +
     (IN_DSH
       ? `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。点各处的「+AI」，把数据发到对话里让 AI 结合你的场景分析；在对话里也可以直接问「哪个插件能做某某」，AI 会自己查这份目录。`
-      : `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。装上 DSH 插件版后，可以一键交给 AI，结合你的具体场景解释取舍。`)
+      : `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。装上 DSH 插件版后，可以一键交给 AI，结合你的具体场景解释取舍。`) +
+    gapNote
 
   await loadInstalled()
   if (IN_DSH) {
@@ -367,9 +374,16 @@ function bindEvents() {
     })
   })
 
+  document.querySelectorAll('#rankBoard button').forEach(bt => {
+    bt.addEventListener('click', () => {
+      document.querySelectorAll('#rankBoard button').forEach(x => x.classList.toggle('on', x === bt))
+      document.querySelectorAll('#rankFilters .chip').forEach(c => c.classList.toggle('hidden', c.dataset.board !== bt.dataset.b))
+      renderRank()
+    })
+  })
   document.querySelectorAll('#rankFilters .chip').forEach(c => {
     c.addEventListener('click', () => {
-      document.querySelectorAll('#rankFilters .chip').forEach(x => x.classList.toggle('on', x === c))
+      document.querySelectorAll(`#rankFilters .chip[data-board="${c.dataset.board}"]`).forEach(x => x.classList.toggle('on', x === c))
       renderRank()
     })
   })
@@ -420,6 +434,7 @@ function renderCands(need, { keepCompat = false } = {}) {
           `<span>周 <b>${num(rec.w)}</b></span>` +
           `<span>月 <b>${num(rec.m)}</b></span>` +
           (d ? `<span>基线 <b>${num(d.base)}</b></span><span>环比 <b>${pct(d.growth)}</b></span>` : '') +
+          (rec.gh ? `<span title="GitHub 星标 · 最近提交 ${esc(rec.gh.p || '—')}">★ <b>${short(rec.gh.s)}</b></span>` : '') +
         `</div>` +
         checkRow(rec) +
         `<div class="links">${linkBtns(rec)}<span class="sp"></span>${installArea(rec)}` +
@@ -462,6 +477,8 @@ const ROWS = [
   { k: 'cad',    label: '版本节奏',    get: r => r.deep && r.deep.cadence, fmt: r => r == null ? '—' : r + ' 天/版', best: 'min' },
   { k: 'age',    label: '最近更新',    get: r => r.deep && r.deep.age, fmt: r => r == null ? '—' : r + ' 天前', best: 'min' },
   { k: 's',      label: '健康度',      get: r => r.deep && r.deep.s, fmt: num, best: 'max' },
+  { k: 'gs',     label: 'GitHub 星标', get: r => r.gh && r.gh.s, fmt: num, best: 'max' },
+  { k: 'gp',     label: '最近提交',    get: r => r.gh && daysSince(r.gh.p), fmt: r => r == null ? '—' : ageText(r), best: 'min' },
 ]
 
 function renderCompare() {
@@ -571,29 +588,86 @@ function buildCategoryFilter() {
   sel.innerHTML = '<option value="">全部分类</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('')
 }
 
-function renderRank() {
-  const metric = document.querySelector('#rankFilters .chip.on').dataset.m
-  const cat = $('#rankCat').value
-  const onlyDeep = metric !== 'w'
+/** 距今几天（ISO 日期）；没有日期返回 null */
+function daysSince(iso) {
+  if (!iso) return null
+  return Math.max(0, Math.floor((Date.now() - Date.parse(iso + 'T00:00:00Z')) / 86400000))
+}
 
-  let rows = Object.values(CAT.packages).filter(r => (!cat || r.cat === cat) && (!onlyDeep || r.deep))
+/** 1234 → 1.2k：星标、Fork 这种数放在窄列里 */
+const short = n => (n == null ? '—' : n >= 10000 ? Math.round(n / 1000) + 'k' : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n))
+
+function rankBoard() {
+  return document.querySelector('#rankBoard button.on').dataset.b
+}
+
+function renderRank() {
+  const board = rankBoard()
+  const metric = document.querySelector(`#rankFilters .chip.on[data-board="${board}"]`).dataset.m
+  const cat = $('#rankCat').value
+  const inCat = r => !cat || r.cat === cat
+  const nameCell = r => `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span></td>`
+  const b = (on, text) => (on ? `<b>${text}</b>` : text)
+
+  if (board === 'gh') {
+    $('#rankCap').textContent = '按 GitHub 仓库数据：星标看关注度，最近提交看还有没有人在维护。一个仓库只列一行；仓库填成 DSH 本体的不算。'
+    const val = r => metric === 'gs' ? r.gh.s
+      : metric === 'gf' ? r.gh.f
+      : metric === 'gi' ? r.gh.i
+      : -(daysSince(r.gh.p) ?? 1e9) // 最近提交：越近越前
+    // 按仓库排：一个仓库只占一行（好些作者把一串插件放在一个仓库里，数据都一样），
+    // 用这个仓库里周下载最多的那个插件代表，注明共用的个数
+    const byRepo = new Map()
+    for (const r of Object.values(CAT.packages)) {
+      if (!r.gh || !inCat(r)) continue
+      const k = r.gh.repo.toLowerCase()
+      const cur = byRepo.get(k)
+      if (!cur) byRepo.set(k, { r, n: 1 })
+      else { cur.n++; if (r.w > cur.r.w) cur.r = r }
+    }
+    const shared = new Map([...byRepo.values()].map(x => [x.r.n, x.n]))
+    const rows = [...byRepo.values()].map(x => x.r).sort((x, y) => val(y) - val(x)).slice(0, 40)
+    $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th>分类</th>' +
+      '<th class="r">★ 星标</th><th class="r">Fork</th><th class="r" title="未关闭的 issue 与 PR">讨论</th>' +
+      '<th class="r" title="仓库最近一次提交">最近提交</th><th></th></tr>'
+    $('#rankBody').innerHTML = rows.length ? rows.map((r, i) => {
+      const age = daysSince(r.gh.p)
+      return `<tr>` +
+        `<td style="color:var(--t3)">${i + 1}</td>` +
+        `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` +
+          (shared.get(r.n) > 1 ? `<div class="sub" title="仓库 ${esc(r.gh.repo)} 里有 ${shared.get(r.n)} 个插件，数据相同，只列一行">等 ${shared.get(r.n)} 个插件共用这个仓库</div>` : '') +
+        `</td>` +
+        `<td><span class="catpill">${esc(r.cat)}</span></td>` +
+        `<td class="r">${b(metric === 'gs', num(r.gh.s))}</td>` +
+        `<td class="r">${b(metric === 'gf', num(r.gh.f))}</td>` +
+        `<td class="r">${b(metric === 'gi', num(r.gh.i))}</td>` +
+        `<td class="r" title="${esc(r.gh.p || '')}">${r.gh.a ? '<span class="arch">已归档</span>' : `<span${age != null && age > 90 ? ' class="stale"' : ''}>${b(metric === 'gp', ageText(age))}</span>`}</td>` +
+        `<td class="lks">${linkBtns(r, { icon: true })}</td>` +
+        `</tr>`
+    }).join('') : '<tr><td colspan="8" class="empty">目录里还没有 GitHub 数据（每日更新取到后就有）。</td></tr>'
+    return
+  }
+
+  $('#rankCap').textContent = '按 npm 下载数据：日常基线已扣掉发版拉取的虚高，最接近真实使用量；周下载含 CI、镜像流量。'
+  const onlyDeep = metric !== 'w'
   const val = r => metric === 'base' ? r.deep.base
     : metric === 'growth' ? (r.deep.growth === null ? -Infinity : r.deep.growth)
     : metric === 's' ? r.deep.s
     : r.w
-  rows.sort((a, b) => val(b) - val(a))
-  rows = rows.slice(0, 40)
-
+  const rows = Object.values(CAT.packages).filter(r => inCat(r) && (!onlyDeep || r.deep)).sort((x, y) => val(y) - val(x)).slice(0, 40)
+  $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th>分类</th>' +
+    `<th class="r">基线</th><th class="r">周下载</th><th class="r">环比</th>${metric === 's' ? '<th class="r">健康度</th>' : ''}` +
+    '<th class="r" title="最近一次发版 · 平均几天发一个版本">更新</th><th></th></tr>'
   $('#rankBody').innerHTML = rows.map((r, i) => {
     const d = r.deep
     const g = d ? d.growth : null
     return `<tr>` +
-      `<td style="color:var(--t3)">${i + 1}</td>` +
-      `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span></td>` +
+      `<td style="color:var(--t3)">${i + 1}</td>` + nameCell(r) +
       `<td><span class="catpill">${esc(r.cat)}</span></td>` +
-      `<td class="r"><b>${num(val(r))}</b></td>` +
-      `<td class="r">${num(r.w)}</td>` +
-      `<td class="r ${g === null ? '' : (g >= 0 ? 'up' : 'down')}">${pct(g)}</td>` +
+      `<td class="r">${b(metric === 'base', d ? num(d.base) : '—')}</td>` +
+      `<td class="r">${b(metric === 'w', num(r.w))}</td>` +
+      `<td class="r ${g === null ? '' : (g >= 0 ? 'up' : 'down')}">${metric === 'growth' ? `<b>${pct(g)}</b>` : pct(g)}</td>` +
+      (metric === 's' ? `<td class="r"><b>${d ? d.s : '—'}</b></td>` : '') +
       maintCell(d) +
       `<td class="lks">${linkBtns(r, { icon: true })}</td>` +
       `</tr>`
@@ -636,6 +710,7 @@ function watchRec(n) {
     w: live.weekly,
     m: live.monthly,
     deep: d ? { base: d.baseline, growth: d.growth, cadence: d.cadence, age: d.ageDays, lastRelease: d.lastRelease, versions: d.versions, s: d.score } : null,
+    gh: live.gh || (base && base.gh) || null,
     live: true,
     catalogW: base ? base.w : null,
   }
@@ -654,7 +729,10 @@ async function refreshWatch() {
     LIVE = { at: j.at, anchor: j.anchor, rows: Object.fromEntries(j.rows.map(x => [x.name, x])) }
     try { localStorage.setItem(LIVE_KEY, JSON.stringify(LIVE)) } catch { /* 存不下就只这次有效 */ }
     const miss = j.rows.filter(x => !x.found).map(x => x.name)
-    toast(miss.length ? `已刷新；npm 上查不到：${miss.join('、')}` : `已刷新 ${j.rows.length} 个插件`)
+    toast([
+      miss.length ? `已刷新；npm 上查不到：${miss.join('、')}` : `已刷新 ${j.rows.length} 个插件`,
+      j.githubError ? `（${j.githubError}）` : '',
+    ].join(''))
   } catch (e) {
     toast('刷新失败：' + e.message + '（检查网络后再试）')
   }
@@ -694,6 +772,7 @@ function renderWatch() {
       `<span style="font-size:11.5px;color:var(--t3)">${esc(r.cat)}</span>` +
       `<span style="font-size:12px"><b>${num(r.w)}</b>/周${delta}</span>` +
       `<span style="font-size:12px;color:var(--t2)">基线 ${d ? num(d.base) : '—'}</span>` +
+      (r.gh ? `<span style="font-size:12px;color:var(--t2)" title="GitHub · 最近提交 ${esc(r.gh.p || '—')}">★ ${short(r.gh.s)}${r.gh.a ? ' · 已归档' : ''}</span>` : '') +
       `<span style="font-size:12px;color:var(--t2)">${d ? ageText(d.age) + '发版' : ''}</span>` +
       `<span class="mlinks">${linkBtns(r, { icon: true })}</span>` +
       `<button class="x" data-rm="${esc(n)}">×</button></div>`
@@ -746,7 +825,7 @@ ${ROWS.map(row => {
   }).join('')}
 </tbody></table>
 <h2>结论</h2>${verdicts}
-<div class="foot">数据来源 api.npmjs.org / registry.npmjs.org，截止 <b>${CAT.anchor}</b>（npm 统计滞后约 5 天）。
+<div class="foot">数据来源 api.npmjs.org / registry.npmjs.org，截止 <b>${CAT.anchor}</b>（npm 最近有数据的一天）。
 下载量含 CI、镜像、爬虫等非人类流量，不等于用户数；<b>日常基线</b>＝扣掉版本发布日与次日后的每日中位数。
 本页由 dsh-pick 面板导出。</div>
 </body></html>`

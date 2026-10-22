@@ -34,6 +34,9 @@ jobs:
         run: npm test
 
       - name: 构建目录
+        # GITHUB_TOKEN 用来批量查插件仓库的星标、Fork、最近提交（GraphQL 必须带令牌）
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node bin/dsh-pick.js build --deep 332
 
       - name: 校验并生成 meta.json
