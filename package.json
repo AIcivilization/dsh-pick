@@ -2,6 +2,14 @@
   "name": "dsh-pick",
   "version": "0.4.3",
   "description": "帮你在 DSH 生态里选对插件：说需求 → 找候选 → 多维比较 → 出结论。下载量是证据，AI 是推理。",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIcivilization/dsh-pick.git"
+  },
+  "homepage": "https://github.com/AIcivilization/dsh-pick#readme",
+  "bugs": {
+    "url": "https://github.com/AIcivilization/dsh-pick/issues"
+  },
   "type": "module",
   "main": "./plugin/index.js",
   "exports": {
