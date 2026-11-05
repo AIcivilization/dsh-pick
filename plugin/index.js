@@ -25,7 +25,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { registerTools } from './tools.js'
-import { loadCatalog, liveStats } from '../lib/engine.js'
+import { loadCatalog, liveStats, parseWatchNames } from '../lib/engine.js'
 import { refreshCatalog, remoteState, CHECK_EVERY_MS } from '../lib/remote.js'
 
 /** 本包根目录：插件就是完整的 dsh-pick 包 */
@@ -142,10 +142,13 @@ function readJsonBody(req) {
   })
 }
 
-/** DSH 插件管理器清单里已装、已启用的插件名；拿不到就是 null（老版本 DSH） */
-function installedNames(pluginManager) {
+/**
+ * DSH 插件管理器清单里已装的插件名；拿不到就是 null（老版本 DSH）。
+ * 新版 DSH 的 listBundles 返回 Promise，老版本直接返回数组，两种都要认
+ */
+async function installedNames(pluginManager) {
   try {
-    const list = pluginManager && typeof pluginManager.listBundles === 'function' ? pluginManager.listBundles() : null
+    const list = pluginManager && typeof pluginManager.listBundles === 'function' ? await pluginManager.listBundles() : null
     if (!Array.isArray(list)) return null
     return new Set(list.filter(b => b && b.name && b.installed !== false).map(b => b.name))
   } catch {
@@ -155,11 +158,6 @@ function installedNames(pluginManager) {
 
 const NAME_RE = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i
 
-/** ?names=a,b,c → 合法、去重的包名，最多 30 个（监控列表本身也最多 30 个） */
-export function parseNames(url) {
-  const raw = new URL(url || '/', 'http://x').searchParams.get('names') || ''
-  return [...new Set(raw.split(',').map(s => s.trim()).filter(s => NAME_RE.test(s)))].slice(0, 30)
-}
 
 function sendJson(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -238,7 +236,7 @@ export function apply(ctx) {
   ctx.inject(['tools'], (toolsCtx) => {
     const tools = toolsCtx.tools || (toolsCtx.get && toolsCtx.get('tools'))
     if (!tools || typeof tools.register !== 'function') return
-    registerTools({ tools }, { installed: () => installedNames(pluginManager) || new Set() })
+    registerTools({ tools }, { installed: async () => (await installedNames(pluginManager)) || new Set() })
       .catch(e => console.warn('[dsh-pick] AI 工具注册失败', e))
   })
 
@@ -358,7 +356,7 @@ export function apply(ctx) {
       kind: 'exact',
       path: '/api-dsh-pick/live',
       handler: async (req, res) => {
-        const names = parseNames(req.url)
+        const names = parseWatchNames(req.url)
         if (!names.length) return sendJson(res, 400, { error: '没有合法的包名' })
         try {
           sendJson(res, 200, await liveStats(names))
@@ -373,7 +371,7 @@ export function apply(ctx) {
       kind: 'exact',
       path: '/api-dsh-pick/installed',
       handler: async (req, res) => {
-        const names = installedNames(pluginManager)
+        const names = await installedNames(pluginManager)
         sendJson(res, 200, {
           known: Boolean(names),
           names: names ? [...names] : [],

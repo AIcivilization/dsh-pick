@@ -32,7 +32,7 @@ const pm = {
   bundles: [{ name: 'dsh-mnemon', installed: true }, { name: 'dsh-pick', installed: true }],
   calls: [],
   next: null, // 下一次 installBundle 的答复
-  listBundles() { return this.bundles },
+  async listBundles() { return this.bundles }, // 新版 DSH 返回 Promise
   async installBundle(spec) { this.calls.push(['install', spec]); return this.next || { application: 'applied' } },
   async removeBundle(name) { this.calls.push(['remove', name]); return {} },
 }

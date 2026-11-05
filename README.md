@@ -84,6 +84,20 @@ dsh plugin --profile web add dsh-pick
 
   装不了的不给「安装」按钮，AI 工具的结果里也带着同样的提醒。
 
+**一键加入监控**：搜索结果和各个榜单里，GitHub、npm 图标前面都有彩色的 **+**，点一下加入「我的监控」，变成 ✓；再点移出。只在 GitHub、没发到 npm 的插件也能加。
+
+**5 个榜单**（排行榜顶部切换）：
+
+| 榜单 | 数据来源 | 排序 |
+|---|---|---|
+| npm 榜 | npm 下载统计，去噪后 | 日常基线 / 周下载 / 增速 / 健康度 |
+| GitHub 榜 | 插件仓库，一个仓库一行 | 星标 / 最近提交 / Fork / 讨论 |
+| 官方榜 | DeepSeek 官方包 `@deepseek-ai/dsh-official-bundles` | 周下载 |
+| 社区榜 | [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)（非官方，dshmarket 也用它） | 星标 / 30 天下载 / 新上架 |
+| 商店榜 | [dsh-plugin-shop](https://github.com/LivXue/dsh-plugin-shop)（第三方，非官方，没有下载量） | 星标 / 新上架 |
+
+社区榜、商店榜每个指标只保留前 100 名。AI 工具 `pick_rank` 加 `board` 参数也能查这三个榜。
+
 **数据每天自动更新**：GitHub Actions 每天重建一次目录，推到本仓库的 `catalog` 分支。插件启动时、之后每 6 小时检查一次，有新的就下载到 `~/.dsh/dsh-pick/`（先走 jsDelivr，再走 raw.githubusercontent.com）。取不到就用包里自带的那份，不影响使用；设置页会写明当前用的是哪份。
 
 ### 作为命令行 / 独立网页
@@ -128,6 +142,7 @@ dsh-pick/
 │   ├── engine.js       数据引擎：抓目录、算指标、查询（一个引擎，多个入口）
 │   ├── remote.js       每日更新的目录：检查、下载、校验、换上
 │   ├── github.js       插件仓库的 GitHub 数据（构建时批量查、刷新时实时查）
+│   ├── boards.js       官方榜、社区榜、商店榜的数据（构建时抓，只解析不执行）
 │   ├── classify.js     13 类 + 其他，关键词加权分类
 │   ├── metrics.js      去噪指标：基线 / 增速 / 节奏 / 新鲜度 / 健康度
 │   ├── words.js        需求 → 搜索词（同义词 + 中文二元切分），CLI 与面板共用

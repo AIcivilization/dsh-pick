@@ -11,7 +11,7 @@ import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildCatalog, loadCatalog, searchByNeed, rank, stats, liveStats, normalize } from '../lib/engine.js'
+import { buildCatalog, loadCatalog, searchByNeed, rank, stats, liveStats, parseWatchNames, normalize } from '../lib/engine.js'
 
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const [, , cmd = 'help', ...rest] = process.argv
@@ -119,8 +119,7 @@ async function main() {
           if (p === '/') p = '/web/panel.html'
           // 「我的监控」的刷新：实时查 npm（和插件里的 /api-dsh-pick/live 一样）
           if (p === '/live') {
-            const names = [...new Set((new URL(req.url, 'http://x').searchParams.get('names') || '').split(',')
-              .map(s => s.trim()).filter(s => /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(s)))].slice(0, 30)
+            const names = parseWatchNames(req.url)
             res.writeHead(names.length ? 200 : 400, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
             res.end(JSON.stringify(names.length ? await liveStats(names) : { error: '没有合法的包名' }))
             return

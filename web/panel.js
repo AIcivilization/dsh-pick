@@ -61,14 +61,14 @@ function askAI(text) {
 function factLine(r) {
   const d = r.deep
   return [
-    `周下载 ${num(r.w)}`,
-    d ? `日常基线 ${num(d.base)}` : '无去噪指标（周下载 Top 之外）',
+    r.w != null ? `周下载 ${num(r.w)}` : '',
+    d ? `日常基线 ${num(d.base)}` : (r.w != null ? '无去噪指标（周下载 Top 之外）' : '只在 GitHub，没有 npm 数据'),
     d ? `近 7 日环比 ${pct(d.growth)}` : '',
     d && d.cadence != null ? `${d.cadence} 天/版` : '',
     d && d.age != null ? `${d.age} 天前更新` : '',
     d ? `健康度 ${d.s}` : '',
     r.rank ? `总榜 #${r.rank}` : '',
-    r.gh ? `GitHub ★${r.gh.s}、Fork ${r.gh.f}、未关闭 issue/PR ${r.gh.i}、最近提交 ${r.gh.p}${r.gh.a ? '（已归档）' : ''}` : '',
+    r.gh ? [`GitHub ★${r.gh.s}`, r.gh.f != null ? `Fork ${r.gh.f}` : '', r.gh.i != null ? `未关闭 issue/PR ${r.gh.i}` : '', r.gh.p ? `最近提交 ${r.gh.p}` : '', r.gh.a ? '已归档' : ''].filter(Boolean).join('、') : '',
   ].filter(Boolean).join(' · ')
 }
 const needLine = () => {
@@ -113,6 +113,7 @@ function askVerdict() {
 
 function askWatch() {
   const rows = watch().map(watchRec).filter(Boolean)
+  rows.forEach(r => { if (r.label) r.n = r.label })
   const live = LIVE.at ? `（npm 实时数据，${new Date(LIVE.at).toLocaleString()} 刷新；下载量含 CI / 镜像流量，不等于用户数）` : dataAsOf()
   return [
     `帮我看看我关注的这些 DSH 插件最近怎么样${live}：`,
@@ -269,7 +270,7 @@ function linkBtns(rec, { icon = false } = {}) {
   if (rec.ghUrl) {
     h += `<a class="${cls}" href="${esc(rec.ghUrl)}" target="_blank" rel="noopener" title="GitHub：${esc(rec.ghUrl)}" aria-label="GitHub">${GH_SVG}${icon ? '' : 'GitHub'}</a>`
   }
-  h += `<a class="${cls}" href="${esc(npm)}" target="_blank" rel="noopener" title="npm：${esc(npm)}" aria-label="npm">${NPM_SVG}${icon ? '' : 'npm'}</a>`
+  if (rec.n) h += `<a class="${cls}" href="${esc(npm)}" target="_blank" rel="noopener" title="npm：${esc(npm)}" aria-label="npm">${NPM_SVG}${icon ? '' : 'npm'}</a>`
   return h
 }
 
@@ -393,6 +394,10 @@ function bindEvents() {
   $('#aiVerdict').addEventListener('click', () => picked.length >= 2 && askAI(askVerdict()))
   $('#aiWatch').addEventListener('click', () => watch().length && askAI(askWatch()))
   $('#btnWatchRefresh').addEventListener('click', refreshWatch)
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-watch]')
+    if (b) toggleWatch(b.dataset.watch)
+  })
 
   $('#btnExport').addEventListener('click', exportHtml)
   $('#btnWatch').addEventListener('click', addPickedToWatch)
@@ -437,7 +442,7 @@ function renderCands(need, { keepCompat = false } = {}) {
           (rec.gh ? `<span title="GitHub 星标 · 最近提交 ${esc(rec.gh.p || '—')}">★ <b>${short(rec.gh.s)}</b></span>` : '') +
         `</div>` +
         checkRow(rec) +
-        `<div class="links">${linkBtns(rec)}<span class="sp"></span>${installArea(rec)}` +
+        `<div class="links">${watchBtn(rec.n)}${linkBtns(rec)}<span class="sp"></span>${installArea(rec)}` +
           (IN_DSH ? `<button class="ai" data-ask title="把这个插件的数据发到对话里问 AI">+AI</button>` : '') +
         `</div>` +
       `</div>`
@@ -447,7 +452,7 @@ function renderCands(need, { keepCompat = false } = {}) {
       if (ask) { e.stopPropagation(); askAI(askCard(rec)); return }
       const inst = e.target.closest('[data-install]')
       if (inst) { e.stopPropagation(); onInstallClick(inst); return }
-      if (e.target.closest('a')) return
+      if (e.target.closest('a, [data-watch]')) return
       togglePick(rec.n)
     })
     host.appendChild(el)
@@ -601,13 +606,73 @@ function rankBoard() {
   return document.querySelector('#rankBoard button.on').dataset.b
 }
 
+/** 官方 / 社区 / 商店榜：数据来自别人维护的目录，每个榜只存头部 */
+function renderOuterBoard(board) {
+  const data = CAT.boards && CAT.boards[board]
+  const CAPS = {
+    official: '来自 DeepSeek 官方包 dsh-official-bundles：官方提供的可选、按需插件。按周下载排，数字含 DSH 安装时的自动拉取，不等于主动选择的人数。',
+    community: `来自社区目录 awesome-dsh-plugin${data ? `（共 ${num(data.total)} 个${data.updated ? `，${esc(data.updated)} 更新` : ''}）` : ''}，不是 DeepSeek 官方。下载是近 30 天。`,
+    shop: `来自第三方插件商店 dsh-plugin-shop${data ? `（共 ${num(data.total)} 个）` : ''}，不是 DeepSeek 官方，商店不提供下载量。`,
+  }
+  $('#rankCap').textContent = CAPS[board]
+  const empty = text => {
+    $('#rankHead').innerHTML = ''
+    $('#rankBody').innerHTML = `<tr><td class="empty">${text}</td></tr>`
+  }
+  if (!data || !data.rows.length) return empty('还没有这个榜单的数据（每日更新取到后就有）。')
+
+  const nameCell = r => `<td class="nm">${esc(r.t || r.n || r.name)}${r.v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` : ''}` +
+    (r.t ? `<div class="sub">${esc(r.n)}</div>` : '') +
+    (!r.n ? '<div class="sub">只在 GitHub，没发到 npm</div>' : '') +
+    (r.d ? `<div class="sub desc" title="${esc(r.d)}">${esc(r.d)}</div>` : '') + `</td>`
+  const actions = r => `<td class="lks">${watchBtn(watchKey(r))}${linkBtns({ n: r.n || '', ghUrl: r.repo || '' }, { icon: true })}</td>`
+
+  if (board === 'official') {
+    const rows = data.rows.slice().sort((x, y) => (y.w || 0) - (x.w || 0))
+    $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th class="r">周下载</th><th></th></tr>'
+    $('#rankBody').innerHTML = rows.map((r, i) => `<tr><td style="color:var(--t3)">${i + 1}</td>${nameCell(r)}<td class="r"><b>${num(r.w)}</b></td>${actions(r)}</tr>`).join('')
+    return
+  }
+
+  const metric = document.querySelector(`#rankFilters .chip.on[data-board="${board}"]`).dataset.m
+  let rows = data.rows.filter(r => r[metric] != null)
+    .sort((x, y) => (y[metric] > x[metric] ? 1 : y[metric] < x[metric] ? -1 : 0))
+  // 按星标排时一个仓库只留一行（优先留发到 npm 的那条），不然同仓库的条目数字一样、刷屏
+  if (metric === 's') {
+    const best = new Map()
+    for (const r of rows) {
+      const k = (r.repo || r.name).toLowerCase()
+      if (!best.has(k) || (!best.get(k).n && r.n)) best.set(k, r)
+    }
+    const keep = new Set(best.values())
+    rows = rows.filter(r => keep.has(r))
+  }
+  rows = rows.slice(0, 40)
+  const hasDl = board === 'community'
+  $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th class="r">★ 星标</th>' +
+    (hasDl ? '<th class="r" title="近 30 天">下载</th>' : '') + '<th class="r">收录</th><th></th></tr>'
+  const strong = (on, t) => (on ? `<b>${t}</b>` : t)
+  $('#rankBody').innerHTML = rows.map((r, i) => `<tr><td style="color:var(--t3)">${i + 1}</td>${nameCell(r)}` +
+    `<td class="r">${strong(metric === 's', num(r.s))}</td>` +
+    (hasDl ? `<td class="r">${strong(metric === 'dl', num(r.dl))}</td>` : '') +
+    `<td class="r">${strong(metric === 'added', r.added ? esc(r.added.slice(5)) : '—')}</td>${actions(r)}</tr>`).join('')
+}
+
 function renderRank() {
   const board = rankBoard()
-  const metric = document.querySelector(`#rankFilters .chip.on[data-board="${board}"]`).dataset.m
+  const onChip = document.querySelector(`#rankFilters .chip.on[data-board="${board}"]`)
+  const metric = onChip ? onChip.dataset.m : ''
   const cat = $('#rankCat').value
   const inCat = r => !cat || r.cat === cat
   const nameCell = r => `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span></td>`
   const b = (on, text) => (on ? `<b>${text}</b>` : text)
+  // 分类是 npm 目录自己算的，别的榜没有这个字段
+  $('#rankCat').classList.toggle('hidden', board !== 'npm' && board !== 'gh')
+
+  if (board === 'official' || board === 'community' || board === 'shop') {
+    renderOuterBoard(board)
+    return
+  }
 
   if (board === 'gh') {
     $('#rankCap').textContent = '按 GitHub 仓库数据：星标看关注度，最近提交看还有没有人在维护。一个仓库只列一行；仓库填成 DSH 本体的不算。'
@@ -642,7 +707,7 @@ function renderRank() {
         `<td class="r">${b(metric === 'gf', num(r.gh.f))}</td>` +
         `<td class="r">${b(metric === 'gi', num(r.gh.i))}</td>` +
         `<td class="r" title="${esc(r.gh.p || '')}">${r.gh.a ? '<span class="arch">已归档</span>' : `<span${age != null && age > 90 ? ' class="stale"' : ''}>${b(metric === 'gp', ageText(age))}</span>`}</td>` +
-        `<td class="lks">${linkBtns(r, { icon: true })}</td>` +
+        `<td class="lks">${watchBtn(r.n)}${linkBtns(r, { icon: true })}</td>` +
         `</tr>`
     }).join('') : '<tr><td colspan="8" class="empty">目录里还没有 GitHub 数据（每日更新取到后就有）。</td></tr>'
     return
@@ -669,7 +734,7 @@ function renderRank() {
       `<td class="r ${g === null ? '' : (g >= 0 ? 'up' : 'down')}">${metric === 'growth' ? `<b>${pct(g)}</b>` : pct(g)}</td>` +
       (metric === 's' ? `<td class="r"><b>${d ? d.s : '—'}</b></td>` : '') +
       maintCell(d) +
-      `<td class="lks">${linkBtns(r, { icon: true })}</td>` +
+      `<td class="lks">${watchBtn(r.n)}${linkBtns(r, { icon: true })}</td>` +
       `</tr>`
   }).join('')
 }
@@ -679,6 +744,39 @@ function watch() {
   try { return JSON.parse(localStorage.getItem(WATCH_KEY)) || [] } catch { return [] }
 }
 function saveWatch(list) { localStorage.setItem(WATCH_KEY, JSON.stringify(list)) }
+
+/** 监控列表里的名字：npm 包名；只在 GitHub 上的插件记成 gh:owner/repo */
+function watchKey(r) {
+  if (r.n) return r.n
+  const m = /github\.com\/([^/]+\/[^/#]+)/.exec(r.repo || '')
+  return m ? 'gh:' + m[1] : ''
+}
+
+/** 彩色 + 号（已监控显示 ✓）：点击由 document 上的委托统一处理 */
+function watchBtn(key) {
+  if (!key) return ''
+  const on = watch().includes(key)
+  return `<button class="wadd${on ? ' on' : ''}" data-watch="${esc(key)}" title="${on ? '已在我的监控里，点一下移除' : '加入我的监控'}" aria-label="${on ? '移出我的监控' : '加入我的监控'}">${on ? '✓' : '+'}</button>`
+}
+
+function toggleWatch(key) {
+  const list = watch()
+  const on = list.includes(key)
+  if (!on && list.length >= 30) { toast('我的监控最多 30 个，先移除几个再加'); return }
+  saveWatch(on ? list.filter(x => x !== key) : [...list, key])
+  const now = !on
+  const shown = key.startsWith('gh:') ? key.slice(3) : key
+  toast(now ? `已加入我的监控：${shown}` : `已移出我的监控：${shown}`)
+  renderWatch()
+  // 同一个插件可能同时出现在搜索结果和排行榜里，一起更新
+  document.querySelectorAll('[data-watch]').forEach(b => {
+    if (b.dataset.watch !== key) return
+    b.classList.toggle('on', now)
+    b.textContent = now ? '✓' : '+'
+    b.title = now ? '已在我的监控里，点一下移除' : '加入我的监控'
+    b.setAttribute('aria-label', now ? '移出我的监控' : '加入我的监控')
+  })
+}
 
 function addPickedToWatch() {
   const list = watch()
@@ -699,6 +797,16 @@ let LIVE = (() => {
  * 否则用目录里的。目录里没有、也没刷新过的返回 null
  */
 function watchRec(n) {
+  // 只在 GitHub 上的插件（gh:owner/repo）：从榜单里找它的信息，有实时数据就用实时的
+  if (n.startsWith('gh:')) {
+    const repo = n.slice(3)
+    const url = 'https://github.com/' + repo
+    const inBoard = ['community', 'shop'].flatMap(k => (CAT.boards && CAT.boards[k] && CAT.boards[k].rows) || [])
+      .find(r => r.repo && r.repo.toLowerCase() === url.toLowerCase())
+    const live = LIVE.rows[n]
+    const gh = live && live.found ? live.gh : (inBoard && inBoard.s != null ? { repo, s: inBoard.s, f: null, i: null, p: null, a: false } : null)
+    return { n: '', label: repo, cat: '只在 GitHub', w: null, m: null, deep: null, ghUrl: url, gh, live: Boolean(live && live.found) }
+  }
   const base = CAT.packages[n]
   const live = LIVE.rows[n]
   if (!live || !live.found) return base || null
@@ -709,7 +817,8 @@ function watchRec(n) {
     v: live.latest || (base && base.v),
     w: live.weekly,
     m: live.monthly,
-    deep: d ? { base: d.baseline, growth: d.growth, cadence: d.cadence, age: d.ageDays, lastRelease: d.lastRelease, versions: d.versions, s: d.score } : null,
+    // npm 下载接口偶尔限流查不到：保留目录里的指标，别把有的数据冲掉
+    deep: d ? { base: d.baseline, growth: d.growth, cadence: d.cadence, age: d.ageDays, lastRelease: d.lastRelease, versions: d.versions, s: d.score } : (base && base.deep) || null,
     gh: live.gh || (base && base.gh) || null,
     live: true,
     catalogW: base ? base.w : null,
@@ -766,12 +875,12 @@ function renderWatch() {
       if (Math.abs(ch) >= 0.05) delta = `<span class="delta ${ch > 0 ? 'up' : 'down'}" title="和目录数据（截止 ${esc(CAT.anchor)}）相比">${ch > 0 ? '↑' : '↓'}${Math.round(Math.abs(ch) * 100)}%</span>`
     }
     return `<div class="mon">` +
-      `<span class="nm">${esc(n)}${r.v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` : ''}</span>` +
+      `<span class="nm">${esc(r.label || n)}${r.v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` : ''}</span>` +
       (r.live ? '<span class="live" title="刚从 npm 查的">实时</span>' : '') +
       `<span class="mrank">${rankText(r)}</span>` +
       `<span style="font-size:11.5px;color:var(--t3)">${esc(r.cat)}</span>` +
-      `<span style="font-size:12px"><b>${num(r.w)}</b>/周${delta}</span>` +
-      `<span style="font-size:12px;color:var(--t2)">基线 ${d ? num(d.base) : '—'}</span>` +
+      (r.w != null ? `<span style="font-size:12px"><b>${num(r.w)}</b>/周${delta}</span>` : '') +
+      (r.w != null ? `<span style="font-size:12px;color:var(--t2)">基线 ${d ? num(d.base) : '—'}</span>` : '') +
       (r.gh ? `<span style="font-size:12px;color:var(--t2)" title="GitHub · 最近提交 ${esc(r.gh.p || '—')}">★ ${short(r.gh.s)}${r.gh.a ? ' · 已归档' : ''}</span>` : '') +
       `<span style="font-size:12px;color:var(--t2)">${d ? ageText(d.age) + '发版' : ''}</span>` +
       `<span class="mlinks">${linkBtns(r, { icon: true })}</span>` +
@@ -782,7 +891,7 @@ function renderWatch() {
     b.addEventListener('click', () => saveWatch(watch().filter(x => x !== b.dataset.rm)) || renderWatch()))
 
   // 对数刻度横条图
-  const rows = list.map(watchRec).filter(Boolean)
+  const rows = list.map(watchRec).filter(r => r && r.w != null)
   const max = Math.max(...rows.map(r => r.w), 1)
   $('#watchChart').innerHTML = rows.map((r, i) => {
     const w = Math.max(Math.log10(r.w + 1) / Math.log10(max + 1) * 100, 1.5)

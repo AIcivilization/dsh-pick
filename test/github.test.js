@@ -63,3 +63,29 @@ test('按 GitHub 排行：一个仓库只留一行', async () => {
   } }
   assert.deepEqual(rank(cat, { metric: 'stars' }).map(r => r.n), ['p2', 'p3'])
 })
+
+test('榜单：官方包只按文本解析；外部目录校验字段和链接', async () => {
+  const { parseOfficial, communityBoard, shopBoard } = await import('../lib/boards.js')
+  const rows = parseOfficial(`const OPTIONAL_BUNDLES = [\n\t"@deepseek-ai/a",\n\t"bad name"\n];\nconst OFFICIAL_ON_DEMAND_CATALOG = [{\n\tpackageName: "@deepseek-ai/b",\n\tmeta: {\n\t\ttitle: {\n\t\t\t"en": "B",\n\t\t\t"zh": "乙"\n\t\t},\n\t\tdescription: {\n\t\t\t"zh": "说明"\n\t\t}\n\t}\n}];`)
+  assert.deepEqual(rows.map(r => [r.n, r.kind, r.t, r.d]), [['@deepseek-ai/a', 'optional', '', ''], ['@deepseek-ai/b', 'ondemand', '乙', '说明']])
+
+  const c = communityBoard({ updated: '2026-11-04', plugins: [
+    { name: 'ok', npm: 'ok-pkg', url: 'https://github.com/a/ok', stars: 5, downloads: 9, added: '2026-11-01', description: { zh: '中文', en: 'en' } },
+    { name: 'gh-only', npm: null, url: 'https://github.com/a/gh-only', stars: 3 },
+    { name: 'evil', npm: null, url: 'javascript:alert(1)//github.com/a/b', stars: 99 },
+    { name: 'host', npm: 'host-pkg', url: 'https://github.com/deepseek-ai/deepseek-harness', stars: 273000, added: '2026-10-01' },
+  ] })
+  assert.equal(c.total, 3) // evil 既没有 npm 也没有合法地址，丢掉
+  assert.equal(c.rows.find(r => r.name === 'ok').d, '中文')
+  assert.equal(c.rows.find(r => r.name === 'gh-only').n, null)
+  assert.equal(c.rows.find(r => r.name === 'host').s, null) // 填成 DSH 本体的不算星标
+
+  const s = shopBoard([{ name: 'p', source: 'npm', repository: 'https://github.com/a/p', added: '2026-11-02', catalog: { summary: { en: 'x' } } }], { 'a/p': 7 })
+  assert.deepEqual(s.rows[0], { n: 'p', name: 'p', repo: 'https://github.com/a/p', s: 7, added: '2026-11-02', d: 'x' })
+})
+
+test('监控名单：npm 包名和 gh:owner/repo 都认，别的丢掉', async () => {
+  const { parseWatchNames } = await import('../lib/engine.js')
+  const u = '/live?names=' + encodeURIComponent('a,@s/b,gh:o/r,../../x,gh:bad,a')
+  assert.deepEqual(parseWatchNames(u), ['a', '@s/b', 'gh:o/r'])
+})

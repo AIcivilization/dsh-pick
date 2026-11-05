@@ -127,8 +127,8 @@ const cleanNames = (names, max) =>
  */
 export async function buildToolDefinitions(deps = {}) {
   const defineTool = await loadDefineTool()
-  const installed = () => {
-    try { return deps.installed ? deps.installed() : new Set() } catch { return new Set() }
+  const installed = async () => {
+    try { return deps.installed ? await deps.installed() : new Set() } catch { return new Set() }
   }
   const header = cat => `目录数据截止 ${cat.anchor || '未知'}（npm 最近有数据的一天；npm 每日下载只在一天结束后汇总，常晚几天），共 ${num(cat.total)} 个插件。`
   const CATS = allCategories()
@@ -159,7 +159,7 @@ export async function buildToolDefinitions(deps = {}) {
           limit: clampInt(args.limit, 1, 20, 8),
           category: CATS.includes(args.category) ? args.category : null,
         })
-        return plain({ header: header(cat), need, candidates: annotate(candidates, cat, installed()) })
+        return plain({ header: header(cat), need, candidates: annotate(candidates, cat, await installed()) })
       },
     }),
 
@@ -184,7 +184,7 @@ export async function buildToolDefinitions(deps = {}) {
         const names = cleanNames(args.names, 8)
         if (!names.length) throw new Error('names 里没有合法的 npm 包名')
         const rows = (await stats(cat, names)).map(withCatalogFields(cat))
-        return plain({ header: header(cat), rows: annotate(rows, cat, installed()) })
+        return plain({ header: header(cat), rows: annotate(rows, cat, await installed()) })
       },
     }),
 
@@ -234,33 +234,50 @@ export async function buildToolDefinitions(deps = {}) {
           return { label: m.label, winner: vals[0][0], value: m.fmt(vals[0][1]) }
         })
         rows.sort((a, b) => ((b.deep && b.deep.score) ?? -1) - ((a.deep && a.deep.score) ?? -1))
-        return plain({ header: header(cat), best, rows: annotate(rows, cat, installed()), missing })
+        return plain({ header: header(cat), best, rows: annotate(rows, cat, await installed()), missing })
       },
     }),
 
     defineTool({
       name: 'pick_rank',
       description:
-        '插件排行榜：全部或某一类，可按周下载、日常基线、环比增速、健康度、GitHub 星标、GitHub 最近提交排。用户问「哪些插件最火 / 某类里谁最好 / 谁还在维护」时用它。',
+        '插件排行榜：全部或某一类，可按周下载、日常基线、环比增速、健康度、GitHub 星标、GitHub 最近提交排。用户问「哪些插件最火 / 某类里谁最好 / 谁还在维护 / 官方有哪些插件 / 社区最近新上了什么」时用它。',
       parameters: {
-        metric: { type: 'string', enum: ['weekly', 'baseline', 'growth', 'score', 'stars', 'pushed'], description: '排序指标，默认 baseline（日常基线，最接近真实使用量）；stars = GitHub 星标，pushed = GitHub 最近提交' },
+        metric: { type: 'string', enum: ['weekly', 'baseline', 'growth', 'score', 'stars', 'pushed', 'downloads', 'newest'], description: '排序指标，默认 baseline（日常基线，最接近真实使用量）；stars = GitHub 星标，pushed = GitHub 最近提交' },
         category: { type: 'string', enum: CATS, description: '只看某一类（可省略）' },
         limit: { type: 'integer', description: '前几名，默认 10，最多 30' },
+        board: { type: 'string', enum: ['official', 'community', 'shop'], description: '看别的榜单（可省略，省略就是 npm / GitHub）：official = DeepSeek 官方插件；community = awesome-dsh-plugin 社区目录；shop = dsh-plugin-shop 插件商店（第三方）。这时 metric 可填 stars / downloads / newest' },
       },
       output: {
         schema: ANY_JSON,
         render: (_a, v) => [{
           type: 'text',
-          text: `${v.header}\n排行：${v.category || '全部'} · 按${v.metricLabel}\n${v.rows.map((r, i) => `${i + 1}.${line(r).slice(1)}`).join('\n')}\n\n${NOTE}`,
+          text: v.board ? `${v.header}\n${v.board}\n${v.rows.join('\n')}\n\n只引用这里的数字，不要自己推算。下载量含 CI、镜像流量，不等于用户数。` : `${v.header}\n排行：${v.category || '全部'} · 按${v.metricLabel}\n${v.rows.map((r, i) => `${i + 1}.${line(r).slice(1)}`).join('\n')}\n\n${NOTE}`,
         }],
       },
       async execute(args) {
         const cat = await loadCatalog()
+        if (args.board) {
+          const limit = clampInt(args.limit, 1, 30, 10)
+          const board = cat.boards && cat.boards[args.board]
+          const TITLE = { official: 'DeepSeek 官方插件', community: 'awesome-dsh-plugin 社区目录', shop: 'dsh-plugin-shop 插件商店（第三方，非官方）' }
+          if (!board) return plain({ header: header(cat), board: `${TITLE[args.board]}：还没有这个榜单的数据`, rows: [] })
+          const key = args.board === 'official' ? 'w' : args.metric === 'downloads' ? 'dl' : args.metric === 'newest' ? 'added' : 's'
+          const rows = board.rows.filter(r => r[key] != null)
+            .sort((a, b) => (b[key] > a[key] ? 1 : b[key] < a[key] ? -1 : 0)).slice(0, limit)
+          return plain({
+            header: header(cat),
+            board: `${TITLE[args.board]}（共 ${num(board.total)} 个）`,
+            rows: rows.map((r, i) => `${i + 1}. ${r.n || r.name}` +
+              (r.s != null ? ` · ★${num(r.s)}` : '') + (r.dl != null ? ` · 30 天下载 ${num(r.dl)}` : '') + (r.w != null ? ` · 周下载 ${num(r.w)}` : '') +
+              (r.added ? ` · 收录 ${r.added}` : '') + (r.n ? '' : ` · 只在 GitHub（${r.repo}）`) + (r.d ? `\n   ${r.d}` : '')),
+          })
+        }
         const LABELS = { weekly: '周下载', baseline: '日常基线', growth: '环比增速', score: '健康度', stars: 'GitHub 星标', pushed: 'GitHub 最近提交' }
         const metric = LABELS[args.metric] ? args.metric : 'baseline'
         const category = CATS.includes(args.category) ? args.category : null
         const rows = rank(cat, { metric, category, limit: clampInt(args.limit, 1, 30, 10) }).map(fromRec)
-        return plain({ header: header(cat), metric, metricLabel: LABELS[metric], category, rows: annotate(rows, cat, installed()) })
+        return plain({ header: header(cat), metric, metricLabel: LABELS[metric], category, rows: annotate(rows, cat, await installed()) })
       },
     }),
   ]

@@ -69,3 +69,21 @@ test('GitHub：排行按星标、提交时间；结果里带 GitHub 数据和「
   assert.match(t, /GitHub ★480 · Fork 30/)
   assert.match(t, /仓库已归档/)
 })
+
+test('pick_rank 看别的榜单；installed 可以是异步的', async () => {
+  const { makeCatalog: mk } = await import('./fixtures.js')
+  const cat = mk()
+  cat.boards = { community: { total: 2, rows: [{ n: 'a', name: 'a', s: 1, dl: 50 }, { n: null, name: 'b', repo: 'https://github.com/x/b', s: 9 }] } }
+  reloadCatalog(cat)
+  const v = await tool.pick_rank.execute({ board: 'community', metric: 'stars' }, {})
+  const t = text('pick_rank', {}, v)
+  assert.match(t, /社区目录（共 2 个）/)
+  assert.match(t, /^1\. b · ★9/m)
+  assert.match(t, /只在 GitHub/)
+  const none = await tool.pick_rank.execute({ board: 'official' }, {})
+  assert.match(none.board, /还没有/)
+
+  const defs2 = await buildToolDefinitions({ installed: async () => new Set(['dsh-mnemon']) })
+  const stats = defs2.find(d => d.name === 'pick_stats')
+  assert.equal((await stats.execute({ names: ['dsh-mnemon'] }, {})).rows[0].installed, true)
+})
