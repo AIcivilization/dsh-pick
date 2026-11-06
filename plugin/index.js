@@ -11,7 +11,7 @@
 //   GET  /api-dsh-pick/catalog.json 目录（含排名、链接、去噪指标）
 //   GET  /api-dsh-pick/meta         目录概要（更新时间、包数、来源）
 //   GET  /api-dsh-pick/update       本插件版本 + npm 上的最新版本
-//   POST /api-dsh-pick/update       更新到 npm 最新版（交给 DSH 的插件管理器）
+//   POST /api-dsh-pick/update       更新到 npm 最新版（交给 DSH 的插件管理器，优先用 updateBundle）
 //   POST /api-dsh-pick/uninstall    从 DSH 卸载本插件
 //   GET  /api-dsh-pick/installed    DSH 里已装的插件名（面板的「已安装」标记）
 //   GET  /api-dsh-pick/live?names=a,b  实时查 npm（「我的监控」的刷新，最多 30 个）
@@ -124,6 +124,38 @@ function managerError(result) {
   const detail = String((result.error && result.error.diagnostic) || (result.packageResult && result.packageResult.output) || '')
     .trim().split('\n').slice(-3).join(' ').slice(-300)
   return detail ? `${code}：${detail}` : code
+}
+
+/** 这个 DSH 能不能在运行中更新插件：新版有 updateBundle，老版只有 installBundle（还不一定成，见上） */
+function canUpdateHere(pluginManager) {
+  return Boolean(pluginManager && (typeof pluginManager.updateBundle === 'function' || typeof pluginManager.installBundle === 'function'))
+}
+
+/**
+ * 新版 DSH 的 updateBundle 答复 → 给面板的答复。答复的结构见官方仓库 packages/boot/plugin-manager：
+ * { from, to, step: 'check' | 'remove' | 'install', result: ChangeResult, restore?: ChangeResult }
+ * result 是最后跑的那一步；restore 只在「旧版已卸、新版没装成」时才有，是把旧版装回去的结果。
+ */
+function updateReply(update, latest, command) {
+  const change = update && update.result
+  if (!change) return { ok: false, message: '更新失败（DSH 没有给出结果）', command }
+  const err = managerError(change)
+  if (!err) {
+    // pnpm 的 minimumReleaseAge 可能让实际装上的比 npm 最新版旧，以 DSH 报的版本为准
+    return { ok: true, version: change.version || latest, restart: change.application === 'restart-required' }
+  }
+  const retry = '也可以完全退出 DSH，在终端执行下面的命令'
+  if (update.step === 'check') {
+    // 这个新版要求更高版本的 DSH，命令行也装不上，就不给命令了
+    if (managerCode(change) === 'incompatible-version') return { ok: false, message: `v${latest} 和这个版本的 DSH 不兼容，先升级 DSH 再更新` }
+    return { ok: false, message: `更新被拒绝，什么都没改（${err}）。${retry}`, command }
+  }
+  if (update.step === 'remove') return { ok: false, message: `卸载旧版 v${update.from} 失败，没有更新（${err}）。${retry}`, command }
+  if (!update.restore) return { ok: false, message: `更新失败，还是 v${update.from}（${err}）。${retry}`, command }
+  if (managerError(update.restore)) {
+    return { ok: false, message: `更新失败（${err}），旧版 v${update.from} 也没能装回去，dsh-pick 现在已经不在了。请完全退出 DSH，在终端执行下面的命令重新安装`, command }
+  }
+  return { ok: false, message: `更新失败，已经装回旧版 v${update.from}（${err}）。${retry}`, command }
 }
 
 /** 读请求体里的 JSON（最多 16 KB，这里只收很小的参数） */
@@ -305,7 +337,7 @@ export function apply(ctx) {
             restartPending: installed && running && compareVersions(installed, running) > 0 ? installed : '',
             latest,
             available: Boolean(latest) && compareVersions(latest, current) > 0,
-            canInstall: Boolean(pluginManager && typeof pluginManager.installBundle === 'function'),
+            canInstall: canUpdateHere(pluginManager),
             command: pluginCommand(`add ${PACKAGE}@${latest || 'latest'}`, profile),
           })
         }
@@ -314,6 +346,14 @@ export function apply(ctx) {
         const command = pluginCommand(`add ${PACKAGE}@${latest || 'latest'}`, profile)
         if (!latest) return sendJson(res, 200, { ok: false, message: '查不到 npm 上的最新版本，检查网络后再试', command })
         if (compareVersions(latest, running) <= 0) return sendJson(res, 200, { ok: false, message: `已经是最新版 v${running}` })
+        // 新版 DSH 有专门的 updateBundle，能在运行中直接更新
+        if (pluginManager && typeof pluginManager.updateBundle === 'function') {
+          try {
+            return sendJson(res, 200, updateReply(await pluginManager.updateBundle(PACKAGE, latest), latest, command))
+          } catch (e) {
+            return sendJson(res, 200, { ok: false, message: `更新失败：${e.message}`, command })
+          }
+        }
         if (!pluginManager || typeof pluginManager.installBundle !== 'function') {
           return sendJson(res, 200, { ok: false, message: '这个版本的 DSH 不能在这里装插件，请在终端执行命令', command })
         }

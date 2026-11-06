@@ -89,12 +89,20 @@ window.__ModuleLoader__.load({
         h(Btn, { onClick: copy }, copied ? L('已复制', 'Copied') : L('复制', 'Copy')))
     }
 
+    /** 更新成功后按钮上的字：只有 updateBundle 明说不用重启（restart: false）才算已生效；老版 DSH 走 installBundle，答复里没有这个字段，照旧提示重启 */
+    function updatedLabel(j) {
+      return j && j.restart === false
+        ? L(`已更新到 v${j.version}`, `Updated to v${j.version}`)
+        : L('已更新，重启 DSH 生效', 'Updated; restart DSH')
+    }
+
     /** 标题行：dsh-pick · 版本号 · 更新 ……（最右）卸载 */
     function HeaderBar() {
       const [info, setInfo] = useState(null)
       const [phase, setPhase] = useState('checking') // checking | idle | updating | updated | removing | removed
       const [confirm, setConfirm] = useState(false)
       const [msg, setMsg] = useState(null) // { text, command? }
+      const [updated, setUpdated] = useState(null) // 更新成功的答复 { version, restart? }
 
       const check = (force) => {
         setPhase('checking')
@@ -108,7 +116,7 @@ window.__ModuleLoader__.load({
         setPhase('updating'); setMsg(null)
         try {
           const j = await api('update', 'POST')
-          if (j.ok) { setPhase('updated'); return }
+          if (j.ok) { setUpdated(j); setPhase('updated'); return }
           setMsg({ text: j.message, command: j.command })
         } catch (e) {
           setMsg({ text: L('更新请求失败：', 'Update failed: ') + e.message })
@@ -131,7 +139,7 @@ window.__ModuleLoader__.load({
 
       let upd
       if (phase === 'updating') upd = { label: L('正在更新…', 'Updating…'), disabled: true }
-      else if (phase === 'updated') upd = { label: L('已更新，重启 DSH 生效', 'Updated; restart DSH'), disabled: true }
+      else if (phase === 'updated') upd = { label: updatedLabel(updated), disabled: true }
       else if (info && info.restartPending) upd = { label: L(`v${info.restartPending} 已装好，重启 DSH 生效`, `v${info.restartPending} installed; restart DSH`), disabled: true }
       else if (info && info.available) upd = { label: L(`更新到 v${info.latest}`, `Update to v${info.latest}`), primary: true, onClick: update }
       else if (phase === 'checking') upd = { label: L('检查更新…', 'Checking…'), disabled: true }
@@ -387,7 +395,7 @@ window.__ModuleLoader__.load({
     }
 
     // 给测试用的内部句柄（浏览器里没人碰它）
-    module.exports = { name: 'dsh-pick', inject: injectSlots, apply, __test: { sendToChat } }
+    module.exports = { name: 'dsh-pick', inject: injectSlots, apply, __test: { sendToChat, updatedLabel } }
     return module.exports
   },
 })

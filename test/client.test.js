@@ -58,6 +58,13 @@ test('注册：右侧栏页签 + 设置页', () => {
   assert.equal(tabs[0].guide[0].title(), '选插件')
 })
 
+test('更新成功的文案：热更新不提重启；要重启或老版 DSH 没说时都提示重启', () => {
+  const { updatedLabel } = load().__test
+  assert.equal(updatedLabel({ ok: true, version: '9.9.9', restart: false }), '已更新到 v9.9.9')
+  assert.equal(updatedLabel({ ok: true, version: '9.9.9', restart: true }), '已更新，重启 DSH 生效')
+  assert.equal(updatedLabel({ ok: true, version: '9.9.9' }), '已更新，重启 DSH 生效') // 老版 DSH 走 installBundle
+})
+
 test('老版本 DSH 没有右侧栏：只注册设置页', () => {
   const { regs } = applyWith({ sidebar: false })
   assert.deepEqual(regs.map(([d]) => d.name), ['settings.section'])
