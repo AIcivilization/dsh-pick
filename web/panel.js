@@ -850,6 +850,9 @@ async function refreshWatch() {
   renderWatch()
 }
 
+/** 我的监控里展开着的插件（只在这次打开期间记住） */
+const watchOpen = new Set()
+
 function renderWatch() {
   const list = watch()
   $('#watchCount').textContent = list.length ? ` (${list.length})` : ''
@@ -866,29 +869,48 @@ function renderWatch() {
 
   host.innerHTML = list.map(n => {
     const r = watchRec(n)
-    if (!r) return `<div class="mon"><span class="nm">${esc(n)}</span><span style="color:var(--t3);font-size:11.5px">不在目录中，点「刷新」去 npm 查</span><button class="x" data-rm="${esc(n)}">×</button></div>`
-    const d = r.deep
-    // 和目录数据比，周下载涨了还是跌了（只在刷新过、差得明显时标）
-    let delta = ''
-    if (r.live && r.catalogW) {
-      const ch = (r.w - r.catalogW) / Math.max(r.catalogW, 1)
-      if (Math.abs(ch) >= 0.05) delta = `<span class="delta ${ch > 0 ? 'up' : 'down'}" title="和目录数据（截止 ${esc(CAT.anchor)}）相比">${ch > 0 ? '↑' : '↓'}${Math.round(Math.abs(ch) * 100)}%</span>`
+    const name = r ? esc(r.label || n) : esc(n)
+    const ver = r && r.v ? ` <span class="ver">v${esc(r.v)}</span>` : ''
+    const open = watchOpen.has(n)
+    let detail = '<span>不在目录中，点「刷新」去 npm 查</span>'
+    if (r) {
+      const d = r.deep
+      // 和目录数据比，周下载涨了还是跌了（只在刷新过、差得明显时标）
+      let delta = ''
+      if (r.live && r.catalogW) {
+        const ch = (r.w - r.catalogW) / Math.max(r.catalogW, 1)
+        if (Math.abs(ch) >= 0.05) delta = `<span class="delta ${ch > 0 ? 'up' : 'down'}" title="和目录数据（截止 ${esc(CAT.anchor)}）相比">${ch > 0 ? '↑' : '↓'}${Math.round(Math.abs(ch) * 100)}%</span>`
+      }
+      detail = (r.live ? '<span class="live" title="刚从 npm / GitHub 查的">实时</span>' : '') +
+        `<span class="mrank">${rankText(r)}</span>` +
+        `<span>${esc(r.cat)}</span>` +
+        (r.w != null ? `<span><b>${num(r.w)}</b>/周${delta}</span>` : '') +
+        (r.w != null ? `<span>基线 ${d ? num(d.base) : '—'}</span>` : '') +
+        (r.gh ? `<span title="GitHub · 最近提交 ${esc(r.gh.p || '—')}">★ ${short(r.gh.s)}${r.gh.a ? ' · 已归档' : ''}</span>` : '') +
+        (d ? `<span>${ageText(d.age)}发版</span>` : '')
     }
-    return `<div class="mon">` +
-      `<span class="nm">${esc(r.label || n)}${r.v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` : ''}</span>` +
-      (r.live ? '<span class="live" title="刚从 npm 查的">实时</span>' : '') +
-      `<span class="mrank">${rankText(r)}</span>` +
-      `<span style="font-size:11.5px;color:var(--t3)">${esc(r.cat)}</span>` +
-      (r.w != null ? `<span style="font-size:12px"><b>${num(r.w)}</b>/周${delta}</span>` : '') +
-      (r.w != null ? `<span style="font-size:12px;color:var(--t2)">基线 ${d ? num(d.base) : '—'}</span>` : '') +
-      (r.gh ? `<span style="font-size:12px;color:var(--t2)" title="GitHub · 最近提交 ${esc(r.gh.p || '—')}">★ ${short(r.gh.s)}${r.gh.a ? ' · 已归档' : ''}</span>` : '') +
-      `<span style="font-size:12px;color:var(--t2)">${d ? ageText(d.age) + '发版' : ''}</span>` +
-      `<span class="mlinks">${linkBtns(r, { icon: true })}</span>` +
-      `<button class="x" data-rm="${esc(n)}">×</button></div>`
+    // 一个插件一行：名字占满中间，最后是链接图标和移除；其余数据折叠，点这一行展开
+    return `<div class="mon${open ? ' open' : ''}">` +
+      `<div class="mhead" data-toggle="${esc(n)}">` +
+        `<button class="mtoggle" aria-expanded="${open}" aria-label="${open ? '收起' : '展开'} ${name} 的数据">${open ? '▾' : '▸'}</button>` +
+        `<span class="nm" title="${name}">${name}${ver}</span>` +
+        (r ? `<span class="mlinks">${linkBtns(r, { icon: true })}</span>` : '') +
+        `<button class="x" data-rm="${esc(n)}" title="从我的监控移除" aria-label="移除 ${name}">×</button>` +
+      `</div>` +
+      (open ? `<div class="mdetail">${detail}</div>` : '') +
+    `</div>`
   }).join('')
 
   host.querySelectorAll('[data-rm]').forEach(b =>
     b.addEventListener('click', () => saveWatch(watch().filter(x => x !== b.dataset.rm)) || renderWatch()))
+  host.querySelectorAll('[data-toggle]').forEach(row =>
+    row.addEventListener('click', e => {
+      if (e.target.closest('a, [data-rm]')) return
+      const n = row.dataset.toggle
+      if (watchOpen.has(n)) watchOpen.delete(n)
+      else watchOpen.add(n)
+      renderWatch()
+    }))
 
   // 对数刻度横条图
   const rows = list.map(watchRec).filter(r => r && r.w != null)
