@@ -98,6 +98,17 @@ dsh plugin --profile web add dsh-pick
 
 社区榜、商店榜每个指标只保留前 100 名。AI 工具 `pick_rank` 加 `board` 参数也能查这三个榜。
 
+**DSH「插件 → 发现」的插件索引源**：dsh-pick 每天生成一份 DSH 官方格式（format 1）的插件索引：
+
+```
+https://cdn.jsdelivr.net/gh/AIcivilization/dsh-pick@catalog/index.json
+```
+
+- 在 DSH「插件」页打开实验功能「自定义插件索引」后，dsh-pick 启动时会自动把它加进「发现」的索引源，只加一次；你在「发现」里删掉后，不会再自动加回来。设置页有「添加到『发现』」按钮。
+- 按官方规定，只收声明了 `dsh.bundle` 和顶层 `engines.dsh` 的插件（目前约 280 个，长尾插件大多没写 `engines.dsh`）。每条都先过官方校验器 `@deepseek-ai/dsh-plugin-market-index`，不合格的剔除，整份再校验一次。
+- 带分类，以及「周下载 / 日常基线 / GitHub 星标 / 健康度」四个排序项。
+- 插件作者想被收录：在 `package.json` 里写上 `"engines": { "dsh": "..." }`。
+
 **数据每天自动更新**：GitHub Actions 每天重建一次目录，推到本仓库的 `catalog` 分支。插件启动时、之后每 6 小时检查一次，有新的就下载到 `~/.dsh/dsh-pick/`（先走 jsDelivr，再走 raw.githubusercontent.com）。取不到就用包里自带的那份，不影响使用；设置页会写明当前用的是哪份。
 
 ### 作为命令行 / 独立网页
@@ -143,6 +154,8 @@ dsh-pick/
 │   ├── remote.js       每日更新的目录：检查、下载、校验、换上
 │   ├── github.js       插件仓库的 GitHub 数据（构建时批量查、刷新时实时查）
 │   ├── boards.js       官方榜、社区榜、商店榜的数据（构建时抓，只解析不执行）
+│   ├── market-index.js 生成 DSH「发现」页用的插件索引（index.json）
+│   ├── market-source.js 把插件索引加进 DSH「发现」的索引源
 │   ├── classify.js     13 类 + 其他，关键词加权分类
 │   ├── metrics.js      去噪指标：基线 / 增速 / 节奏 / 新鲜度 / 健康度
 │   ├── words.js        需求 → 搜索词（同义词 + 中文二元切分），CLI 与面板共用

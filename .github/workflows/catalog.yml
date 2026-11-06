@@ -31,6 +31,10 @@ jobs:
         with:
           node-version: 22
 
+      # 开发依赖只有官方的插件索引校验器（@deepseek-ai/dsh-plugin-market-index），不进 npm 包
+      - name: 装开发依赖
+        run: npm ci
+
       - name: 测试
         run: npm test
 
@@ -43,13 +47,17 @@ jobs:
       - name: 校验并生成 meta.json
         run: node scripts/catalog-meta.mjs data/catalog.json out
 
+      # DSH「插件 → 发现」读的插件索引：只收声明了 engines.dsh 的插件，逐条过官方校验器
+      - name: 生成插件索引 index.json
+        run: node scripts/market-index.mjs data/catalog.json out
+
       - name: 推到 catalog 分支
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd out
           git init -q -b catalog
-          git add catalog.json meta.json
+          git add catalog.json meta.json index.json
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -qm "目录 $(node -p "require('./meta.json').anchor")"
           git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" catalog
@@ -58,6 +66,6 @@ jobs:
         # 刷不掉也不要紧：jsDelivr 对分支的缓存最多 12 小时，插件 6 小时问一次，晚半天拿到而已
         continue-on-error: true
         run: |
-          for f in catalog.json meta.json; do
+          for f in catalog.json meta.json index.json; do
             curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@catalog/$f" > /dev/null && echo "已刷新 $f"
           done

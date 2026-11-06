@@ -15,6 +15,10 @@
 //   POST /api-dsh-pick/uninstall    从 DSH 卸载本插件
 //   GET  /api-dsh-pick/installed    DSH 里已装的插件名（面板的「已安装」标记）
 //   GET  /api-dsh-pick/live?names=a,b  实时查 npm（「我的监控」的刷新，最多 30 个）
+//   GET  /api-dsh-pick/market       dsh-pick 的插件索引在不在 DSH「插件 → 发现」的索引源里
+//   POST /api-dsh-pick/market       把它加进去（设置页的按钮）
+//
+// 启动时还会自动把插件索引加进「发现」一次（lib/market-source.js），用户删掉后不再自动加。
 //   POST /api-dsh-pick/install      安装目录里的某个插件 { name }
 //
 // 另外注册 4 个 AI 工具（plugin/tools.js）：对话里的 AI 能自己查目录、比较插件。
@@ -27,6 +31,7 @@ import { join } from 'node:path'
 import { registerTools } from './tools.js'
 import { loadCatalog, liveStats, parseWatchNames } from '../lib/engine.js'
 import { refreshCatalog, remoteState, CHECK_EVERY_MS } from '../lib/remote.js'
+import { ensureMarketSource, marketStatus } from '../lib/market-source.js'
 
 /** 本包根目录：插件就是完整的 dsh-pick 包 */
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -254,6 +259,15 @@ export function apply(ctx) {
     profile = ctx.get && ctx.get('profileContext') && ctx.get('profileContext').name
   } catch { profile = undefined }
 
+  // DSH「插件 → 发现」的索引源（实验功能「自定义插件索引」打开时才有这个服务）：自动加一次 dsh-pick 的插件索引
+  let pluginMarket
+  ctx.inject(['pluginMarket'], (mCtx) => {
+    pluginMarket = mCtx.pluginMarket || (mCtx.get && mCtx.get('pluginMarket'))
+    ensureMarketSource(pluginMarket)
+      .then(r => { if (r.status === 'added') console.info('[dsh-pick] 已把插件索引加进「插件 → 发现」') })
+      .catch(() => {})
+  })
+
   // 每日更新的目录：启动时查一次，之后每 6 小时查一次（查不到就继续用手上的）
   const refresh = () => refreshCatalog().catch(() => {})
   const startTimer = setTimeout(refresh, 5000) // 别和 DSH 启动抢网络
@@ -403,6 +417,22 @@ export function apply(ctx) {
         } catch (e) {
           sendJson(res, 502, { error: `查 npm 失败：${e.message}` })
         }
+      },
+    }))
+
+    // 「发现」的索引源：查状态 / 用户点按钮加进去
+    track(ws.register({
+      kind: 'exact',
+      path: '/api-dsh-pick/market',
+      handler: async (req, res) => {
+        if (req.method === 'GET') return sendJson(res, 200, await marketStatus(pluginMarket))
+        if (!isSafePost(req)) return sendJson(res, 403, { ok: false, message: '只接受本页面发出的请求' })
+        const r = await ensureMarketSource(pluginMarket, { force: true })
+        if (r.status === 'added' || r.status === 'present') return sendJson(res, 200, { ok: true, status: r.status })
+        if (r.status === 'unavailable') {
+          return sendJson(res, 200, { ok: false, message: '先在 DSH 的「插件」页打开实验功能「自定义插件索引」，「发现」页出来后再点' })
+        }
+        return sendJson(res, 200, { ok: false, message: `没加上：${r.message || r.status}` })
       },
     }))
 

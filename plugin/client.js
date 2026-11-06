@@ -274,10 +274,13 @@ window.__ModuleLoader__.load({
     function SettingsSection() {
       const [meta, setMeta] = useState(null)
       const [openMsg, setOpenMsg] = useState('')
+      const [market, setMarket] = useState(null) // { available, added, url }
+      const [marketMsg, setMarketMsg] = useState('')
 
       useEffect(() => {
         let alive = true
         api('meta').then(j => { if (alive) setMeta(j) }).catch(() => {})
+        api('market').then(j => { if (alive) setMarket(j) }).catch(() => {})
         return () => { alive = false }
       }, [])
 
@@ -311,6 +314,29 @@ window.__ModuleLoader__.load({
                 h(Btn, { onClick: openSidebar }, L('在右侧栏打开', 'Open in right sidebar')),
                 openMsg ? h('span', { style: { fontSize: 12, color: C.faint } }, openMsg) : null)
             : null,
+        ),
+
+        h(Section, { title: L('插件索引源（DSH「插件 → 发现」）', 'Plugin index (DSH Plugins → Discover)') },
+          h('div', null, L(
+            'dsh-pick 每天生成一份 DSH 官方格式的插件索引。加进「发现」后，可以在 DSH 的插件页里直接浏览、安装其中的插件。只收声明了 engines.dsh 的插件（官方要求）。',
+            'dsh-pick publishes a daily plugin index in the official DSH format. Add it to Discover to browse and install its plugins on the DSH Plugins page. Only plugins that declare engines.dsh are listed (an official requirement).')),
+          !market ? null
+            : market.added
+              ? h('div', { style: { marginTop: 8, color: C.text } }, L('✓ 已在「发现」的索引源里', '✓ Already in Discover'))
+              : h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' } },
+                  h(Btn, {
+                    onClick: async () => {
+                      setMarketMsg('')
+                      try {
+                        const j = await api('market', 'POST')
+                        if (j.ok) setMarket({ ...market, available: true, added: true })
+                        else setMarketMsg(j.message || L('没加上', 'Not added'))
+                      } catch (e) { setMarketMsg(e.message) }
+                    },
+                  }, L('添加到「发现」', 'Add to Discover')),
+                  !market.available ? h('span', { style: { fontSize: 12, color: C.faint } }, L('需要先在 DSH「插件」页打开实验功能「自定义插件索引」', 'Turn on the experimental "Custom plugin indexes" on the DSH Plugins page first')) : null,
+                  marketMsg ? h('span', { style: { fontSize: 12, color: C.danger } }, marketMsg) : null),
+          market ? h(CommandLine, { command: market.url }) : null,
         ),
 
         h(Section, { title: L('数据口径', 'About the data') },

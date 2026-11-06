@@ -37,6 +37,11 @@ const pm = {
   async removeBundle(name) { this.calls.push(['remove', name]); return {} },
 }
 
+// DSH「发现」的索引源服务：一开始只有别人的源
+const market = { urls: ['https://other.example/index.json'] }
+market.listIndexes = async () => market.urls.map(url => ({ url }))
+market.setIndexes = async urls => { market.urls = [...urls] }
+
 const routes = {}
 const stops = []
 plugin.apply({
@@ -45,6 +50,7 @@ plugin.apply({
   inject: (deps, fn) => {
     if (deps[0] === 'webServer') fn({ webServer: { register: d => { routes[d.path] = d.handler } } })
     if (deps[0] === 'pluginManager') fn({ pluginManager: pm })
+    if (deps[0] === 'pluginMarket') fn({ pluginMarket: market })
   },
 })
 await new Promise(r => setTimeout(r, 30)) // 等 apply 里读完 package.json
@@ -251,4 +257,17 @@ test('更新失败时「完全退出 DSH」按系统给做法', async () => {
   assert.match(alreadyInstalledHint('win32'), /PowerShell/)
   assert.doesNotMatch(alreadyInstalledHint('win32'), /Cmd/)
   assert.match(alreadyInstalledHint('linux'), /进程已经结束/)
+})
+
+test('「发现」的索引源：启动时自动加上；接口能查状态；用户删掉后点按钮能加回', async () => {
+  const { INDEX_URL } = await import('../lib/market-index.js')
+  await new Promise(r => setTimeout(r, 30))
+  assert.deepEqual(market.urls, ['https://other.example/index.json', INDEX_URL])
+  assert.deepEqual(await get('market'), { available: true, added: true, url: INDEX_URL })
+  market.urls = ['https://other.example/index.json']
+  assert.equal((await get('market')).added, false)
+  const r = await post('market')
+  assert.equal(r.ok, true)
+  assert.ok(market.urls.includes(INDEX_URL))
+  assert.equal((await post('market', {}, { origin: 'http://evil.example' })).status, 403)
 })

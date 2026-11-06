@@ -23,14 +23,20 @@ test('同一个词只留最高权重', () => {
 })
 
 test('installFacts：bundle、平台、DSH 版本要求', () => {
-  assert.deepEqual(installFacts({}), { b: false, p: null, r: null })
+  assert.deepEqual(installFacts({}), { b: false, p: null, r: null, e: null, a: null })
   assert.deepEqual(
     installFacts({
       dsh: { bundle: { patch: './x.yml' }, client: { platform: 'web' } },
       peerDependencies: { '@deepseek-ai/cordis': '^4.0.1', '@deepseek-ai/dsh-settings': '^0.2.0-rc.1' },
     }),
-    { b: true, p: 'web', r: '^0.2.0-rc.1' },
+    { b: true, p: 'web', r: '^0.2.0-rc.1', e: null, a: null },
   )
+  // e 只认顶层 engines.dsh、原样保留；a 只留作者名
+  assert.equal(installFacts({ engines: { dsh: '>=0.2.0-0 ' } }).e, '>=0.2.0-0 ')
+  assert.equal(installFacts({ dsh: { engines: { dsh: '^0.2.0' } } }).e, null)
+  assert.equal(installFacts({ author: 'Wang Fei <a@b.c> (https://x)' }).a, 'Wang Fei')
+  assert.equal(installFacts({ author: { name: 'Li', email: 'x' } }).a, 'Li')
+  assert.equal(installFacts({ author: { email: 'x' } }).a, null)
   // engines.dsh 与 dsh.engines.dsh 都认；重复的要求只写一次
   assert.equal(installFacts({ engines: { dsh: '>=0.2.0' }, peerDependencies: { '@deepseek-ai/dsh': '>=0.2.0' } }).r, '>=0.2.0')
   assert.equal(installFacts({ dsh: { engines: { dsh: '^0.2.0' } } }).r, '^0.2.0')
@@ -97,7 +103,7 @@ test('communityRecord：manifest 要和包名对得上，外部字段校验类�
   assert.deepEqual(rec.kw, ['memory'])
   assert.equal(rec.home, '')
   assert.equal(rec.repo, 'https://github.com/x/dsh-a', '社区目录校验过的仓库优先')
-  assert.deepEqual(rec.inst, { b: true, p: 'web', r: null })
+  assert.deepEqual(rec.inst, { b: true, p: 'web', r: null, e: null, a: null })
   assert.equal(rec.m, 90)
 
   // 字段类型不对也不能崩
