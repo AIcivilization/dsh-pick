@@ -6,7 +6,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { validCatalog } from '../lib/remote.js'
+import { validCatalog, shrinkProblem } from '../lib/remote.js'
 
 const [src, outDir] = process.argv.slice(2)
 if (!src || !outDir) {
@@ -22,6 +22,7 @@ if (!validCatalog(cat)) {
 }
 
 const packages = Object.values(cat.packages)
+
 const meta = {
   tool: 'dsh-pick',
   anchor: cat.anchor,
@@ -31,6 +32,18 @@ const meta = {
   withInstallFacts: packages.filter(p => p.inst).length,
   bytes: Buffer.byteLength(text),
   builtAt: new Date().toISOString(),
+}
+
+// 线上上一份 meta（raw 比 jsDelivr 新：CDN 有缓存）。拿不到（第一次、网络问题）就不比
+let previous = null
+try {
+  const r = await fetch('https://raw.githubusercontent.com/AIcivilization/dsh-pick/catalog/meta.json', { signal: AbortSignal.timeout(15000) })
+  if (r.ok) previous = await r.json()
+} catch { /* 不比 */ }
+const problem = shrinkProblem(previous, meta)
+if (problem && process.env.ALLOW_SHRINK !== '1') {
+  console.error(`目录缩水了：${problem}。这次不发布，线上继续用上一份。确认是正常缩小，就设 ALLOW_SHRINK=1 再跑`)
+  process.exit(1)
 }
 
 await mkdir(outDir, { recursive: true })

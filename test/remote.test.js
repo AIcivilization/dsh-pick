@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, mkdir, writeFile, readdir, rename } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
-import { refreshCatalog, validCatalog, writeAtomic, MIRRORS } from '../lib/remote.js'
+import { refreshCatalog, validCatalog, writeAtomic, shrinkProblem, MIRRORS } from '../lib/remote.js'
 import { cachePath, loadCatalog, reloadCatalog } from '../lib/engine.js'
 import { makeCatalog, tempHome, fakeFetch } from './fixtures.js'
 
@@ -104,4 +104,12 @@ test('别的错误（比如磁盘满）不重试', async () => {
   const full = async () => { calls++; throw Object.assign(new Error('full'), { code: 'ENOSPC' }) }
   await assert.rejects(writeAtomic(join(dir, 'a.json'), 'x', { renameImpl: full, wait: 1 }), /full/)
   assert.equal(calls, 1)
+})
+
+test('防缩水：包数或带安装信息的包少了 10% 以上就拦下', () => {
+  const prev = { total: 5354, withInstallFacts: 5300 }
+  assert.equal(shrinkProblem(null, { total: 1 }), null) // 第一次，没得比
+  assert.equal(shrinkProblem(prev, { total: 5300, withInstallFacts: 5200 }), null)
+  assert.match(shrinkProblem(prev, { total: 3772, withInstallFacts: 3700 }), /包数从 5354 降到 3772/)
+  assert.match(shrinkProblem(prev, { total: 5354, withInstallFacts: 2028 }), /带安装信息的包/)
 })

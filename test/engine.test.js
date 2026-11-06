@@ -199,3 +199,25 @@ test('communityPackages：包名不合法的不要，重复的只留一个', () 
   assert.deepEqual(communityPackages(null), [])
   assert.deepEqual(communityPackages({ plugins: 'x' }), [])
 })
+
+test('addCommunity：被限流读不到的沿用上次目录里的，404 才算不存在', async t => {
+  const manifest = name => ({ name, version: '1.0.0', description: 'x', keywords: [], dsh: { bundle: {} } })
+  const fake = fakeFetch({
+    'registry.npmjs.org/dsh-ok/latest': manifest('dsh-ok'),
+    'registry.npmjs.org/dsh-throttled/latest': 429,
+    'registry.npmjs.org/dsh-throttled-new/latest': 503,
+    'registry.npmjs.org/dsh-gone/latest': 404,
+    'downloads/point/last-week/': {},
+  })
+  t.mock.method(globalThis, 'fetch', fake)
+  const records = new Map()
+  const rows = ['dsh-ok', 'dsh-throttled', 'dsh-throttled-new', 'dsh-gone'].map(n => ({ n, m: 1, repo: null }))
+  const previous = { 'dsh-throttled': { n: 'dsh-throttled', v: '0.9.0', w: 42, m: 50, inst: { b: true } }, 'dsh-gone': { n: 'dsh-gone', w: 1 } }
+  await addCommunity(records, rows, { previous, wait: 1 })
+  assert.deepEqual([...records.keys()].sort(), ['dsh-ok', 'dsh-throttled'])
+  assert.equal(records.get('dsh-throttled').v, '0.9.0', '沿用上次的记录')
+  // 被限流的分三轮重试过
+  assert.ok(fake.calls.filter(u => u.includes('dsh-throttled/latest')).length >= 3)
+  // 404 的不重试
+  assert.equal(fake.calls.filter(u => u.includes('dsh-gone/latest')).length, 1)
+})
