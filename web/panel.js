@@ -850,9 +850,6 @@ async function refreshWatch() {
   renderWatch()
 }
 
-/** 我的监控里展开着的插件（只在这次打开期间记住） */
-const watchOpen = new Set()
-
 function renderWatch() {
   const list = watch()
   $('#watchCount').textContent = list.length ? ` (${list.length})` : ''
@@ -867,50 +864,42 @@ function renderWatch() {
     return
   }
 
-  host.innerHTML = list.map(n => {
+  // 像排行榜一样：上面一行是列名，每个插件一行。名字在最前、图标和移除在最后，
+  // 中间各列始终都在，右侧栏变窄时一起按比例压缩（放不下的用省略号，悬停看全文）
+  const cell = (text, title, cls = '') => `<span class="mc${cls ? ' ' + cls : ''}" title="${esc(title)}">${text}</span>`
+  const head = '<div class="mrow mhead">' +
+    '<span class="mc nm">插件</span>' +
+    [['总榜', 'r', '总榜排名'], ['分类', '', '分类'], ['周下载', 'r', '周下载'], ['基线', 'r', '日常基线'], ['★', 'r', 'GitHub 星标'], ['发版', 'r', '最近一次发版']]
+      .map(([t, cls, title]) => `<span class="mc${cls ? ' ' + cls : ''}" title="${title}">${t}</span>`).join('') +
+    '<span class="mc acts"></span></div>'
+  host.innerHTML = head + list.map(n => {
     const r = watchRec(n)
     const name = r ? esc(r.label || n) : esc(n)
     const ver = r && r.v ? ` <span class="ver">v${esc(r.v)}</span>` : ''
-    const open = watchOpen.has(n)
-    let detail = '<span>不在目录中，点「刷新」去 npm 查</span>'
-    if (r) {
-      const d = r.deep
-      // 和目录数据比，周下载涨了还是跌了（只在刷新过、差得明显时标）
-      let delta = ''
-      if (r.live && r.catalogW) {
-        const ch = (r.w - r.catalogW) / Math.max(r.catalogW, 1)
-        if (Math.abs(ch) >= 0.05) delta = `<span class="delta ${ch > 0 ? 'up' : 'down'}" title="和目录数据（截止 ${esc(CAT.anchor)}）相比">${ch > 0 ? '↑' : '↓'}${Math.round(Math.abs(ch) * 100)}%</span>`
-      }
-      detail = (r.live ? '<span class="live" title="刚从 npm / GitHub 查的">实时</span>' : '') +
-        `<span class="mrank">${rankText(r)}</span>` +
-        `<span>${esc(r.cat)}</span>` +
-        (r.w != null ? `<span><b>${num(r.w)}</b>/周${delta}</span>` : '') +
-        (r.w != null ? `<span>基线 ${d ? num(d.base) : '—'}</span>` : '') +
-        (r.gh ? `<span title="GitHub · 最近提交 ${esc(r.gh.p || '—')}">★ ${short(r.gh.s)}${r.gh.a ? ' · 已归档' : ''}</span>` : '') +
-        (d ? `<span>${ageText(d.age)}发版</span>` : '')
+    const live = r && r.live ? '<i class="livedot" title="实时数据：刚从 npm / GitHub 查的"></i>' : ''
+    const nameCell = `<span class="mc nm" title="${name}${r && r.v ? ' v' + esc(r.v) : ''}">${live}${name}${ver}</span>`
+    const acts = `<span class="mc acts">${r ? linkBtns(r, { icon: true }) : ''}<button class="x" data-rm="${esc(n)}" title="从我的监控移除" aria-label="移除 ${name}">×</button></span>`
+    if (!r) return `<div class="mrow">${nameCell}<span class="mc span">不在目录中，点「刷新」去 npm 查</span>${acts}</div>`
+    const d = r.deep
+    // 和目录数据比，周下载涨了还是跌了（只在刷新过、差得明显时标）
+    let delta = ''
+    if (r.live && r.catalogW) {
+      const ch = (r.w - r.catalogW) / Math.max(r.catalogW, 1)
+      if (Math.abs(ch) >= 0.05) delta = `<span class="delta ${ch > 0 ? 'up' : 'down'}">${ch > 0 ? '↑' : '↓'}${Math.round(Math.abs(ch) * 100)}%</span>`
     }
-    // 一个插件一行：名字占满中间，最后是链接图标和移除；其余数据折叠，点这一行展开
-    return `<div class="mon${open ? ' open' : ''}">` +
-      `<div class="mhead" data-toggle="${esc(n)}">` +
-        `<button class="mtoggle" aria-expanded="${open}" aria-label="${open ? '收起' : '展开'} ${name} 的数据">${open ? '▾' : '▸'}</button>` +
-        `<span class="nm" title="${name}">${name}${ver}</span>` +
-        (r ? `<span class="mlinks">${linkBtns(r, { icon: true })}</span>` : '') +
-        `<button class="x" data-rm="${esc(n)}" title="从我的监控移除" aria-label="移除 ${name}">×</button>` +
-      `</div>` +
-      (open ? `<div class="mdetail">${detail}</div>` : '') +
-    `</div>`
+    const rankFull = r.rank ? `总榜 #${num(r.rank)}${r.crank ? ` · ${r.cat} #${num(r.crank)}` : ''}` : ''
+    return '<div class="mrow">' + nameCell +
+      cell(r.rank ? `#${r.rank < 1000 ? r.rank : short(r.rank)}` : '—', rankFull || '不在总榜里', 'r') +
+      cell(esc(r.cat || '—'), r.cat || '') +
+      cell(r.w != null ? `<b>${short(r.w)}</b>${delta}` : '—', r.w != null ? `周下载 ${num(r.w)}${delta ? `（和目录数据相比 ${delta.replace(/<[^>]+>/g, '')}）` : ''}` : '只在 GitHub，没有 npm 数据', 'r') +
+      cell(d ? short(d.base) : '—', d ? `日常基线 ${num(d.base)} 次/天` : '没有去噪指标', 'r') +
+      cell(r.gh ? `${short(r.gh.s)}${r.gh.a ? ' · 已归档' : ''}` : '—', r.gh ? `GitHub ★ ${num(r.gh.s)}${r.gh.p ? ` · 最近提交 ${r.gh.p}` : ''}${r.gh.a ? ' · 已归档' : ''}` : '没有 GitHub 数据', 'r') +
+      cell(d ? ageText(d.age) : '—', d && d.lastRelease ? `最近发版 ${d.lastRelease}` : '', 'r') +
+      acts + '</div>'
   }).join('')
 
   host.querySelectorAll('[data-rm]').forEach(b =>
     b.addEventListener('click', () => saveWatch(watch().filter(x => x !== b.dataset.rm)) || renderWatch()))
-  host.querySelectorAll('[data-toggle]').forEach(row =>
-    row.addEventListener('click', e => {
-      if (e.target.closest('a, [data-rm]')) return
-      const n = row.dataset.toggle
-      if (watchOpen.has(n)) watchOpen.delete(n)
-      else watchOpen.add(n)
-      renderWatch()
-    }))
 
   // 对数刻度横条图
   const rows = list.map(watchRec).filter(r => r && r.w != null)

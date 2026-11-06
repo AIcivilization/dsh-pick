@@ -118,9 +118,8 @@ table.rank td .arch{font-size:10.5px;color:var(--t3);background:var(--soft);bord
 .section h2 .h2-acts{margin-left:auto;display:inline-flex;gap:8px;align-items:center}
 .section h2 .h2-acts .ai{margin-left:0}
 .btn.sm{font-size:11.5px;padding:0 10px;height:24px;border-radius:7px}
-.mon .live{font-size:10px;color:var(--ok-text);background:var(--ok-bg);border-radius:5px;padding:1px 5px;white-space:nowrap}
-.mon .delta{font-size:10.5px;margin-left:3px}
-.mon .delta.up{color:var(--ok)}.mon .delta.down{color:var(--bad)}
+.mrow .delta{font-size:10.5px;margin-left:3px}
+.mrow .delta.up{color:var(--ok)}.mrow .delta.down{color:var(--bad)}
 #watchAsOf b{color:var(--t2);font-weight:600}
 .inst{appearance:none;font-family:inherit;font-size:10.5px;font-weight:600;border-radius:6px;padding:2px 9px;cursor:pointer;
   border:1px solid var(--accent);background:var(--panel);color:var(--accent);white-space:nowrap}
@@ -228,20 +227,24 @@ td.down{color:var(--bad);font-weight:600}
 .catpill{font-size:10.5px;background:var(--soft);color:var(--t2);border-radius:20px;padding:2px 8px;white-space:nowrap}
 
 /* ---------- 监控 ---------- */
-.mon{border-bottom:1px solid var(--soft)}
-.mon:last-child{border-bottom:none}
-.mon .mhead{display:flex;align-items:center;gap:6px;padding:8px 0;cursor:pointer}
-.mon .mhead:hover .nm{color:var(--accent)}
-.mon .mtoggle{appearance:none;border:none;background:none;color:var(--t3);cursor:pointer;font-size:11px;width:16px;padding:0;flex:none}
-.mon .nm{font-size:13px;font-weight:650;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mon .ver{color:var(--t3);font-weight:400;font-size:11px}
-.mon .mdetail{display:flex;flex-wrap:wrap;align-items:center;gap:5px 12px;padding:0 0 10px 22px;font-size:12px;color:var(--t2)}
-.mon .mdetail b{color:var(--text)}
-.mon .mrank{font-size:10.5px;color:var(--t3);font-variant-numeric:tabular-nums}
-.mon .mrank b{color:var(--t2);font-weight:700}
-.mon .mlinks{display:flex;flex:none}
-.mon .x{appearance:none;border:none;background:none;color:var(--t3);cursor:pointer;font-size:16px;line-height:1;padding:0 2px 0 4px;flex:none}
-.mon .x:hover{color:var(--bad)}
+/* 我的监控：和排行榜一样一行一个插件，上面是列名。名字和最后的图标宽度固定，
+   中间各列用 minmax(0, 1fr) 平分剩下的宽度，栏变窄时一起压缩，放不下的用省略号 */
+/* 数字列留够短写数字（312k、#3088）的最小宽度，不会被截断；压缩主要由「分类」承担 */
+#watchList{--mcols:minmax(84px,3.4fr) minmax(36px,.7fr) minmax(0,1.2fr) minmax(40px,.9fr) minmax(32px,.8fr) minmax(30px,.7fr) minmax(36px,.8fr) auto}
+.mrow{display:grid;grid-template-columns:var(--mcols);align-items:center;column-gap:6px;padding:8px 0;border-bottom:1px solid var(--soft);font-size:12px;color:var(--t2)}
+.mrow:last-child{border-bottom:none}
+.mrow.mhead{font-size:11px;color:var(--t3);font-weight:600;padding:0 0 7px;border-bottom:1px solid var(--line)}
+.mrow .mc{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.mrow .mc.r{text-align:right}
+.mrow .mc.span{grid-column:2 / -2;color:var(--t3)}
+.mrow .mc b{color:var(--text);font-weight:650}
+.mrow .nm{font-size:13px;font-weight:650;color:var(--text)}
+.mrow.mhead .nm{font-size:11px;font-weight:600;color:var(--t3)}
+.mrow .ver{color:var(--t3);font-weight:400;font-size:11px}
+.mrow .acts{display:flex;align-items:center;justify-content:flex-end;overflow:visible}
+.mrow .livedot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:5px;vertical-align:middle}
+.mrow .x{appearance:none;border:none;background:none;color:var(--t3);cursor:pointer;font-size:16px;line-height:1;padding:0 2px 0 4px;flex:none}
+.mrow .x:hover{color:var(--bad)}
 
 .foot{font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:6px}
 .foot b{color:var(--t2);font-weight:650}
