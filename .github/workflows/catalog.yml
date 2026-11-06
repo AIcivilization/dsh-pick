@@ -1,7 +1,7 @@
 # 每日目录：每天重建一次 DSH 插件目录，推到本仓库的 catalog 分支。
 # 插件（lib/remote.js）从 jsDelivr / raw.githubusercontent.com 取，不用为了更新数据而发版。
 #
-# catalog 分支每次强推、只留一个提交：目录 1.5 MB，天天累积提交会把仓库撑大。
+# catalog 分支每次强推、只留一个提交：目录约 3 MB，天天累积提交会把仓库撑大。
 # 手动触发：GitHub → Actions → 每日目录 → Run workflow。
 
 name: 每日目录
@@ -22,7 +22,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 2,250 个包时构建约 25 分钟；补进社区目录后包数翻倍多，manifest 要多读 3,000 个
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
