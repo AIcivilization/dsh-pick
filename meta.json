@@ -1,0 +1,10 @@
+{
+  "tool": "dsh-pick",
+  "anchor": "2026-11-05",
+  "asOf": "2026-11-07",
+  "total": 5567,
+  "deepCount": 332,
+  "withInstallFacts": 5567,
+  "bytes": 3305621,
+  "builtAt": "2026-11-07T10:27:29.827Z"
+}
