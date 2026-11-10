@@ -30,6 +30,22 @@
     },
     "client": {
       "platform": "web"
+    },
+    "catalog": {
+      "category": "tool",
+      "summary": {
+        "en": "Pick DSH plugins: an overall ranking that merges several plugin markets, denoised download metrics, GitHub data, one-click install.",
+        "zh": "选 DSH 插件：合并几个插件市场的综合榜、去噪后的下载指标、GitHub 数据，榜上一键安装。"
+      },
+      "capabilities": [
+        "webServer",
+        "pluginManager",
+        "pluginMarket",
+        "tools",
+        "sidebarRight",
+        "sessions",
+        "network"
+      ]
     }
   },
   "files": [
@@ -54,7 +70,9 @@
     "plugin-advisor",
     "pick",
     "npm-stats",
-    "plugin-market"
+    "plugin-market",
+    "marketplace",
+    "plugin-manager"
   ],
   "license": "MIT",
   "engines": {
