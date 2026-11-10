@@ -22,8 +22,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 2,250 个包时构建约 25 分钟；补进社区目录后包数翻倍多，manifest 要多读 3,000 个
-    timeout-minutes: 90
+    # 2,250 个包时构建约 25 分钟；补进社区目录后近 6,000 个包，npm 限流时要分几轮降速重试，
+    # 2026-11-10 曾跑满 90 分钟被取消。放到 180（GitHub 允许最长 360）
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
