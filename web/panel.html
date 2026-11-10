@@ -114,6 +114,12 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 .board button.on{background:var(--panel);color:var(--text);box-shadow:0 1px 2px var(--shadow)}
 table.rank td.nm .sub{font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px}
 table.rank td.nm .desc{min-width:150px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* 综合榜：收录于哪几个市场 */
+.srcchip{display:inline-block;font-size:10px;font-weight:500;color:var(--t2);background:var(--soft);border-radius:4px;padding:0 5px;margin:2px 3px 0 0;white-space:nowrap}
+.srcchip.off{color:var(--accent);background:var(--accent-bg)}
+.srcchip.gh{color:var(--t3)}
+table.rank td .sc{font-size:13px;font-weight:700;color:var(--text);cursor:help}
+table.rank td.lks .inst,table.rank td.lks .badge-in,table.rank td.lks .badge-no{margin-right:4px;vertical-align:top}
 table.rank td .arch{font-size:10.5px;color:var(--t3);background:var(--soft);border-radius:5px;padding:1px 6px}
 .section h2 .h2-acts{margin-left:auto;display:inline-flex;gap:8px;align-items:center}
 .section h2 .h2-acts .ai{margin-left:0}
@@ -378,7 +384,8 @@ td.down{color:var(--bad);font-weight:600}
     <div class="section">
       <h2>排行榜</h2>
       <div class="board" id="rankBoard">
-        <button data-b="npm" class="on">npm 榜</button>
+        <button data-b="overall" class="on">综合榜</button>
+        <button data-b="npm">npm 榜</button>
         <button data-b="gh">GitHub 榜</button>
         <button data-b="official">官方榜</button>
         <button data-b="community">社区榜</button>
@@ -386,10 +393,10 @@ td.down{color:var(--bad);font-weight:600}
       </div>
       <p class="cap" id="rankCap"></p>
       <div class="filters" id="rankFilters">
-        <button class="chip on" data-board="npm" data-m="base">日常基线</button>
-        <button class="chip" data-board="npm" data-m="w">周下载</button>
-        <button class="chip" data-board="npm" data-m="growth">增速最快</button>
-        <button class="chip" data-board="npm" data-m="s">健康度</button>
+        <button class="chip on hidden" data-board="npm" data-m="base">日常基线</button>
+        <button class="chip hidden" data-board="npm" data-m="w">周下载</button>
+        <button class="chip hidden" data-board="npm" data-m="growth">增速最快</button>
+        <button class="chip hidden" data-board="npm" data-m="s">健康度</button>
         <button class="chip on hidden" data-board="gh" data-m="gs">星标</button>
         <button class="chip hidden" data-board="gh" data-m="gp">最近提交</button>
         <button class="chip hidden" data-board="gh" data-m="gf">Fork</button>

@@ -458,7 +458,10 @@ export function apply(ctx) {
         if (!isSafePost(req)) return sendJson(res, 403, { ok: false, message: '只接受本页面发出的请求' })
         const { name } = await readJsonBody(req)
         if (typeof name !== 'string' || !NAME_RE.test(name)) return sendJson(res, 400, { ok: false, message: '包名不对' })
-        const rec = (await loadCatalog()).packages[name]
+        const cat = await loadCatalog()
+        // 目录里的 npm 包，或官方榜里的 DeepSeek 官方插件（官方包不带 dsh-plugin 关键字，不在目录里）
+        const official = ((cat.boards && cat.boards.official && cat.boards.official.rows) || []).some(r => r.n === name)
+        const rec = cat.packages[name] || (official ? { n: name } : null)
         if (!rec) return sendJson(res, 400, { ok: false, message: `${name} 不在 DSH 插件目录里，这里不装` })
         // 没声明 dsh.bundle 的包，DSH 一定拒绝安装：不白跑一趟 pnpm
         if (rec.inst && rec.inst.b === false) {

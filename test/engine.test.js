@@ -221,3 +221,20 @@ test('addCommunity：被限流读不到的沿用上次目录里的，404 才算�
   // 404 的不重试
   assert.equal(fake.calls.filter(u => u.includes('dsh-gone/latest')).length, 1)
 })
+
+test('每日目录缺某个榜时，用随包自带的那份顶上', async () => {
+  const home = await tempHome()
+  const env = { DSH_HOME: home }
+  await mkdir(dirname(cachePath(env)), { recursive: true })
+  const remote = makeCatalog({ anchor: '2099-01-01' })
+  remote.boards = { shop: { total: 1, rows: [{ name: 'remote-shop' }] } } // 旧代码构建的：没有综合榜
+  await writeFile(cachePath(env), JSON.stringify(remote))
+  reloadCatalog(null)
+  const cat = await loadCatalog({ env })
+  assert.equal(cat.source, 'remote')
+  assert.equal(cat.boards.shop.rows[0].name, 'remote-shop', '每日目录有的用它的')
+  const { readFile } = await import('node:fs/promises')
+  const bundled = JSON.parse(await readFile(new URL('../data/catalog.json', import.meta.url), 'utf8'))
+  if (bundled.boards && bundled.boards.overall) assert.ok(cat.boards.overall, '缺的综合榜用自带的')
+  reloadCatalog(null)
+})

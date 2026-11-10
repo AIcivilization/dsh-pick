@@ -246,7 +246,7 @@ export async function buildToolDefinitions(deps = {}) {
         metric: { type: 'string', enum: ['weekly', 'baseline', 'growth', 'score', 'stars', 'pushed', 'downloads', 'newest'], description: '排序指标，默认 baseline（日常基线，最接近真实使用量）；stars = GitHub 星标，pushed = GitHub 最近提交' },
         category: { type: 'string', enum: CATS, description: '只看某一类（可省略）' },
         limit: { type: 'integer', description: '前几名，默认 10，最多 30' },
-        board: { type: 'string', enum: ['official', 'community', 'shop'], description: '看别的榜单（可省略，省略就是 npm / GitHub）：official = DeepSeek 官方插件；community = awesome-dsh-plugin 社区目录；shop = dsh-plugin-shop 插件商店（第三方）。这时 metric 可填 stars / downloads / newest' },
+        board: { type: 'string', enum: ['overall', 'official', 'community', 'shop'], description: '看别的榜单（可省略，省略就是 npm / GitHub）：overall = 综合榜（几个插件市场合并去重，按综合分排，用户问「最值得装的」先用它）；official = DeepSeek 官方插件；community = awesome-dsh-plugin 社区目录（dshmarket 用的就是它）；shop = dsh-plugin-shop 插件商店（第三方）。community / shop 时 metric 可填 stars / downloads / newest' },
       },
       output: {
         schema: ANY_JSON,
@@ -257,6 +257,31 @@ export async function buildToolDefinitions(deps = {}) {
       },
       async execute(args) {
         const cat = await loadCatalog()
+        if (args.board === 'overall') {
+          const limit = clampInt(args.limit, 1, 30, 10)
+          const o = cat.boards && cat.boards.overall
+          if (!o) return plain({ header: header(cat), board: '综合榜：还没有数据', rows: [] })
+          const W = o.weights
+          const LABEL = { dshmarket: 'dshmarket', 'dsh-m': 'dsh-m 精选', shop: 'dsh-plugin-shop', official: 'DeepSeek 官方' }
+          const category = CATS.includes(args.category) ? args.category : null
+          const have = await installed()
+          const rows = o.rows.filter(r => !category || (r.n && cat.packages[r.n] && cat.packages[r.n].cat === category)).slice(0, limit)
+          return plain({
+            header: header(cat),
+            board: `综合榜（${num(o.total)} 个插件参与排名；综合分 = 使用 ${W.use}% + 关注 ${W.stars}% + 维护 ${W.maint}% + 共识 ${W.consensus}% + 健康 ${W.health}%，各项 0~100）`,
+            rows: rows.map((r, i) => {
+              const rec = r.n ? cat.packages[r.n] : null
+              const name = r.n || r.name
+              return `${i + 1}. ${name} · 综合分 ${r.sc}（使用 ${r.p[0]} · 关注 ${r.p[1]} · 维护 ${r.p[2]} · 共识 ${r.p[3]} · 健康 ${r.p[4]}）` +
+                ` · 收录于 ${r.src.map(k => LABEL[k] || k).join('、') || '（只在 npm）'}` +
+                (rec ? ` · 周下载 ${num(rec.w)}` : r.w != null ? ` · 周下载 ${num(r.w)}` : '') +
+                (r.s != null ? ` · ★${num(r.s)}` : '') +
+                (r.n && have.has(r.n) ? ' · （已安装）' : '') +
+                (r.n ? '' : ` · 只在 GitHub（${r.repo}），还不能在面板里直接装`) +
+                ((rec && rec.d) || r.d ? `\n   ${String((rec && rec.d) || r.d).slice(0, 140)}` : '')
+            }),
+          })
+        }
         if (args.board) {
           const limit = clampInt(args.limit, 1, 30, 10)
           const board = cat.boards && cat.boards[args.board]

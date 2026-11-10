@@ -87,3 +87,20 @@ test('pick_rank 看别的榜单；installed 可以是异步的', async () => {
   const stats = defs2.find(d => d.name === 'pick_stats')
   assert.equal((await stats.execute({ names: ['dsh-mnemon'] }, {})).rows[0].installed, true)
 })
+
+test('pick_rank 看综合榜', async () => {
+  const { makeCatalog: mk } = await import('./fixtures.js')
+  const cat = mk()
+  cat.boards = { overall: { total: 2, weights: { use: 40, stars: 20, maint: 20, consensus: 10, health: 10 }, rows: [
+    { k: 'dsh-mnemon', n: 'dsh-mnemon', sc: 88, p: [90, 80, 97, 50, 77], src: ['dshmarket', 'shop'], s: 120 },
+    { k: 'gh:y/only', n: null, name: 'only', repo: 'https://github.com/y/only', sc: 40, p: [0, 60, 40, 25, 40], src: ['dshmarket'] },
+  ] } }
+  reloadCatalog(cat)
+  const v = await tool.pick_rank.execute({ board: 'overall' }, {})
+  const t = text('pick_rank', {}, v)
+  assert.match(t, /综合榜（2 个插件参与排名/)
+  assert.match(t, /^1\. dsh-mnemon · 综合分 88/m)
+  assert.match(t, /收录于 dshmarket、dsh-plugin-shop/)
+  assert.match(t, /（已安装）/)
+  assert.match(t, /只在 GitHub（https:\/\/github.com\/y\/only）/)
+})

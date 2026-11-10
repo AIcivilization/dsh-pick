@@ -237,6 +237,7 @@ async function onInstallClick(btn) {
       INSTALLED.add(name)
       toast(j.restart ? `${name} 已安装，重启 DSH 后生效` : `${name} 已安装`)
       renderCands($('#need').value.trim())
+      renderRank()
       return
     }
     toast(j.message || '安装失败', j.command)
@@ -397,6 +398,9 @@ function bindEvents() {
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-watch]')
     if (b) toggleWatch(b.dataset.watch)
+    // 排行榜里的「安装」（搜索结果卡片上的由卡片自己处理）
+    const ib = e.target.closest('#rankBody [data-install]')
+    if (ib) onInstallClick(ib)
   })
 
   $('#btnExport').addEventListener('click', exportHtml)
@@ -433,7 +437,8 @@ function renderCands(need, { keepCompat = false } = {}) {
         `<span class="rel">${esc(rec.cat)}</span>` +
         (d ? '<span class="ok" title="有去噪指标，可参与健康度比较">✓ 可比较</span>' : '<span class="nook" title="未进入去噪范围（周下载 Top 之外），缺基线/环比/节奏">仅基础</span>') +
         `</div>` +
-        `<div class="rk">${rankText(rec)}</div>` +
+        `<div class="rk">${rankText(rec)}${rec.sc != null ? ` · 综合分 <b>${rec.sc}</b>` : ''}</div>` +
+        (rec.src && rec.src.length ? `<div>${srcChips(rec.src)}</div>` : '') +
         `<div class="d">${esc(rec.d)}</div>` +
         `<div class="kv">` +
           `<span>周 <b>${num(rec.w)}</b></span>` +
@@ -658,8 +663,64 @@ function renderOuterBoard(board) {
     `<td class="r">${strong(metric === 'added', r.added ? esc(r.added.slice(5)) : '—')}</td>${actions(r)}</tr>`).join('')
 }
 
+/** 「收录于」的市场名 */
+const MARKET_LABEL = { dshmarket: 'dshmarket', 'dsh-m': 'dsh-m 精选', shop: '商店', official: '官方' }
+function srcChips(src) {
+  return (src || []).map(k => `<span class="srcchip${k === 'official' ? ' off' : ''}" title="收录于 ${esc(MARKET_LABEL[k] || k)}">${esc(MARKET_LABEL[k] || k)}</span>`).join('')
+}
+
+/**
+ * 综合榜：几个插件市场合成一个榜（每日构建时算好，见 lib/overall.js），一个插件一行。
+ * npm 上的插件能直接装；只在 GitHub 上的先只展示
+ */
+function renderOverall() {
+  const data = CAT.boards && CAT.boards.overall
+  const W = (data && data.weights) || { use: 40, stars: 20, maint: 20, consensus: 10, health: 10 }
+  $('#rankCap').textContent = `把 dshmarket、dsh-m 精选、dsh-plugin-shop 商店、DeepSeek 官方几个市场合成一个榜，一个插件只出现一次。` +
+    `综合分 = 使用 ${W.use}% + 关注 ${W.stars}% + 维护 ${W.maint}% + 共识 ${W.consensus}% + 健康 ${W.health}%（鼠标停在分数上看明细）；` +
+    `仓库已归档、DSH 装不了的不进榜。${data ? `共 ${num(data.total)} 个插件参与排名。` : ''}`
+  if (!data || !data.rows.length) {
+    $('#rankHead').innerHTML = ''
+    $('#rankBody').innerHTML = '<tr><td class="empty">还没有综合榜的数据（每日更新取到后就有）。</td></tr>'
+    return
+  }
+  const cat = $('#rankCat').value
+  const rows = data.rows
+    .map(r => ({ r, rec: r.n ? CAT.packages[r.n] : null }))
+    .filter(({ rec }) => !cat || (rec && rec.cat === cat))
+    .slice(0, 60)
+  $('#rankHead').innerHTML = '<tr><th style="width:36px">#</th><th>插件</th>' +
+    '<th class="r" title="综合分 0~100">综合</th><th class="r">周下载</th><th class="r">★</th><th class="r" title="最近一次发版或提交">最近</th><th></th></tr>'
+  $('#rankBody').innerHTML = rows.map(({ r, rec }, i) => {
+    const name = r.n || r.name
+    const v = rec ? rec.v : r.v
+    const w = rec ? rec.w : r.w
+    const desc = rec ? rec.d : r.d
+    const [pu, ps, pm, pc, ph] = r.p
+    const why = `使用 ${pu} · 关注 ${ps} · 维护 ${pm} · 共识 ${pc} · 健康 ${ph}（各项 0~100）`
+    const age = daysSince(r.last)
+    // 能装的：目录里的 npm 包按装前检查给按钮；官方插件不在目录里，名字核对过，也能装
+    const inst = r.n ? installArea(rec || { n: r.n }) : ''
+    const links = linkBtns(rec || { n: r.n || '', ghUrl: r.repo || '' }, { icon: true })
+    return `<tr><td style="color:var(--t3)">${i + 1}</td>` +
+      `<td class="nm">${esc(name)}${v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(v)}</span>` : ''}` +
+        `<div>${srcChips(r.src)}${r.n ? '' : '<span class="srcchip gh">只在 GitHub</span>'}</div>` +
+        (desc ? `<div class="sub desc" title="${esc(desc)}">${esc(desc)}</div>` : '') + `</td>` +
+      `<td class="r"><span class="sc" title="${why}">${r.sc}</span></td>` +
+      `<td class="r">${w != null ? short(w) : '—'}</td>` +
+      `<td class="r">${r.s != null ? short(r.s) : '—'}</td>` +
+      `<td class="r" title="${esc(r.last || '')}"><span${age != null && age > 90 ? ' class="stale"' : ''}>${age != null ? ageText(age) : '—'}</span></td>` +
+      `<td class="lks">${watchBtn(r.k)}${inst}${links}</td></tr>`
+  }).join('')
+}
+
 function renderRank() {
   const board = rankBoard()
+  if (board === 'overall') {
+    $('#rankCat').classList.remove('hidden')
+    renderOverall()
+    return
+  }
   const onChip = document.querySelector(`#rankFilters .chip.on[data-board="${board}"]`)
   const metric = onChip ? onChip.dataset.m : ''
   const cat = $('#rankCat').value

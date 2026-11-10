@@ -219,6 +219,19 @@ test('安装：只装目录里有、并且声明了 dsh.bundle 的', async () =>
   assert.deepEqual(pm.calls.at(-1), ['install', 'meow-memory'])
 })
 
+test('安装：官方榜里的 DeepSeek 官方插件不在目录里，也能装', async () => {
+  const { reloadCatalog: reload } = await import('../lib/engine.js')
+  const { makeCatalog: mk } = await import('./fixtures.js')
+  const cat = mk()
+  cat.boards = { official: { total: 1, rows: [{ n: '@deepseek-ai/dsh-x' }] } }
+  reload(cat)
+  const ok = await post('install', { name: '@deepseek-ai/dsh-x' })
+  assert.equal(ok.ok, true)
+  assert.deepEqual(pm.calls.at(-1), ['install', '@deepseek-ai/dsh-x'])
+  assert.match((await post('install', { name: '@deepseek-ai/dsh-not-listed' })).message, /不在 DSH 插件目录里/)
+  reload(mk())
+})
+
 test('已装列表', async () => {
   const r = await get('installed')
   assert.equal(r.known, true)
