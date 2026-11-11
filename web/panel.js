@@ -203,29 +203,47 @@ function checkRow(r) {
     `</div>`
 }
 
-/** 卡片上的安装区：已安装 / 安装（点一下变「确认安装」，再点才装）/ 装不了 */
-function installArea(r) {
+// 安装的图标：向下的箭头落进托盘（和 GitHub、npm 图标一样 13px）
+const INSTALL_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12.5v1h11v-1"/></svg>'
+
+/**
+ * 安装区：已安装 / 安装（点一下变「确认」，再点才装）/ 装不了。
+ * icon = 排行榜这种窄列：和 GitHub、npm 一样只要一个 24×22 的图标，说明放在悬停提示里
+ */
+function installArea(r, { icon = false } = {}) {
   if (!IN_DSH) return ''
-  if (INSTALLED.has(r.n)) return '<span class="badge-in">✓ 已安装</span>'
+  if (INSTALLED.has(r.n)) {
+    return icon ? '<span class="ib in" title="已安装">✓</span>' : '<span class="badge-in">✓ 已安装</span>'
+  }
   if (!CAN_INSTALL) return ''
-  if (!installCheck(r).ok) return '<span class="badge-no" title="原因见卡片上的提醒">不能安装</span>'
-  return `<button class="inst" data-install="${esc(r.n)}" title="用 DSH 的插件管理器安装">安装</button>`
+  const check = installCheck(r)
+  if (!check.ok) {
+    return icon ? `<span class="ib no" title="不能安装：${esc(check.warn.join('；'))}">⊘</span>` : '<span class="badge-no" title="原因见卡片上的提醒">不能安装</span>'
+  }
+  return icon
+    ? `<button class="ib inst-ic" data-install="${esc(r.n)}" data-icon="1" title="安装（点两次：第一次确认）" aria-label="安装 ${esc(r.n)}">${INSTALL_SVG}</button>`
+    : `<button class="inst" data-install="${esc(r.n)}" title="用 DSH 的插件管理器安装">安装</button>`
 }
 
 async function onInstallClick(btn) {
   const name = btn.dataset.install
+  const icon = btn.dataset.icon === '1' // 图标按钮：不换文字，只换样式和提示
+  const label = text => { if (!icon) btn.textContent = text }
   if (!btn.classList.contains('confirm')) {
     btn.classList.add('confirm')
-    btn.textContent = '确认安装？'
+    label('确认安装？')
+    if (icon) { btn.title = `再点一次，安装 ${name}`; toast(`再点一次安装按钮，确认安装 ${name}`) }
     setTimeout(() => {
       if (btn.isConnected && btn.classList.contains('confirm') && !btn.disabled) {
-        btn.classList.remove('confirm'); btn.textContent = '安装'
+        btn.classList.remove('confirm'); label('安装')
+        if (icon) btn.title = '安装（点两次：第一次确认）'
       }
     }, 4000)
     return
   }
   btn.disabled = true
-  btn.textContent = '安装中…'
+  label('安装中…')
+  if (icon) toast(`正在安装 ${name}…`)
   try {
     const r = await fetch('/api-dsh-pick/install', {
       method: 'POST',
@@ -246,7 +264,7 @@ async function onInstallClick(btn) {
   }
   btn.disabled = false
   btn.classList.remove('confirm')
-  btn.textContent = '安装'
+  label('安装')
 }
 
 /* ---------------- 排名文案与外链按钮 ---------------- */
@@ -664,9 +682,14 @@ function renderOuterBoard(board) {
 }
 
 /** 「收录于」的市场名 */
-const MARKET_LABEL = { dshmarket: 'dshmarket', 'dsh-m': 'dsh-m 精选', shop: '商店', official: '官方' }
-function srcChips(src) {
-  return (src || []).map(k => `<span class="srcchip${k === 'official' ? ' off' : ''}" title="收录于 ${esc(MARKET_LABEL[k] || k)}">${esc(MARKET_LABEL[k] || k)}</span>`).join('')
+const MARKET_LABEL = { dshmarket: 'dshmarket', 'dsh-m': 'dsh-m 精选', shop: 'dsh-plugin-shop 商店', official: 'DeepSeek 官方' }
+// 排行榜那种窄列里用短名（悬停看全名）
+const MARKET_SHORT = { dshmarket: 'dshm', 'dsh-m': '精选', shop: '商店', official: '官方' }
+function srcChips(src, { short = false } = {}) {
+  return (src || []).map(k => {
+    const full = MARKET_LABEL[k] || k
+    return `<span class="srcchip${k === 'official' ? ' off' : ''}" title="收录于 ${esc(full)}">${esc(short ? MARKET_SHORT[k] || k : full)}</span>`
+  }).join('')
 }
 
 /**
@@ -689,8 +712,12 @@ function renderOverall() {
     .map(r => ({ r, rec: r.n ? CAT.packages[r.n] : null }))
     .filter(({ rec }) => !cat || (rec && rec.cat === cat))
     .slice(0, 60)
-  $('#rankHead').innerHTML = '<tr><th style="width:36px">#</th><th>插件</th>' +
-    '<th class="r" title="综合分 0~100">综合</th><th class="r">周下载</th><th class="r">★</th><th class="r" title="最近一次发版或提交">最近</th><th></th></tr>'
+  // 固定列宽（table.ov）：数字列和操作列宽度固定，插件名占剩下的；不然简介把名字一列撑得很宽，
+  // 右边固定的操作列正好盖住数字
+  $('#rankHead').innerHTML = '<tr><th style="width:26px">#</th><th>插件</th>' +
+    '<th class="r" style="width:34px" title="综合分 0~100">综合</th><th class="r" style="width:44px">周下载</th>' +
+    '<th class="r" style="width:38px" title="GitHub 星标">★</th><th class="r" style="width:46px" title="最近一次发版或提交">最近</th>' +
+    '<th style="width:112px"></th></tr>'
   $('#rankBody').innerHTML = rows.map(({ r, rec }, i) => {
     const name = r.n || r.name
     const v = rec ? rec.v : r.v
@@ -700,11 +727,11 @@ function renderOverall() {
     const why = `使用 ${pu} · 关注 ${ps} · 维护 ${pm} · 共识 ${pc} · 健康 ${ph}（各项 0~100）`
     const age = daysSince(r.last)
     // 能装的：目录里的 npm 包按装前检查给按钮；官方插件不在目录里，名字核对过，也能装
-    const inst = r.n ? installArea(rec || { n: r.n }) : ''
+    const inst = r.n ? installArea(rec || { n: r.n }, { icon: true }) : ''
     const links = linkBtns(rec || { n: r.n || '', ghUrl: r.repo || '' }, { icon: true })
     return `<tr><td style="color:var(--t3)">${i + 1}</td>` +
-      `<td class="nm">${esc(name)}${v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(v)}</span>` : ''}` +
-        `<div>${srcChips(r.src)}${r.n ? '' : '<span class="srcchip gh">只在 GitHub</span>'}</div>` +
+      `<td class="nm"><div class="nmline" title="${esc(name)}${v ? ' v' + esc(v) : ''}">${esc(name)}${v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(v)}</span>` : ''}</div>` +
+        `<div class="chips">${srcChips(r.src, { short: true })}${r.n ? '' : '<span class="srcchip gh" title="只在 GitHub，没发到 npm">GitHub</span>'}</div>` +
         (desc ? `<div class="sub desc" title="${esc(desc)}">${esc(desc)}</div>` : '') + `</td>` +
       `<td class="r"><span class="sc" title="${why}">${r.sc}</span></td>` +
       `<td class="r">${w != null ? short(w) : '—'}</td>` +
@@ -716,6 +743,7 @@ function renderOverall() {
 
 function renderRank() {
   const board = rankBoard()
+  document.querySelector('table.rank').classList.toggle('ov', board === 'overall')
   if (board === 'overall') {
     $('#rankCat').classList.remove('hidden')
     renderOverall()

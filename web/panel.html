@@ -119,7 +119,25 @@ table.rank td.nm .desc{min-width:150px;display:-webkit-box;-webkit-line-clamp:2;
 .srcchip.off{color:var(--accent);background:var(--accent-bg)}
 .srcchip.gh{color:var(--t3)}
 table.rank td .sc{font-size:13px;font-weight:700;color:var(--text);cursor:help}
-table.rank td.lks .inst,table.rank td.lks .badge-in,table.rank td.lks .badge-no{margin-right:4px;vertical-align:top}
+/* 排行榜操作列的四个图标一样大：+、安装、GitHub、npm，都是 24×22 */
+.ib{appearance:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;padding:0;margin-right:4px;
+  border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--accent);font-size:12px;line-height:1;vertical-align:top;cursor:default;font-family:inherit}
+button.ib{cursor:pointer}
+button.ib:hover{border-color:var(--accent);background:var(--accent-bg)}
+.ib.inst-ic.confirm{background:var(--accent);border-color:var(--accent);color:#fff}
+.ib.inst-ic:disabled{opacity:.6;cursor:default}
+.ib.in{color:var(--ok-text);background:var(--ok-bg);border-color:transparent}
+.ib.no{color:var(--t3);background:var(--soft);border-color:transparent;cursor:help}
+table.rank .wadd{width:24px;height:22px;font-size:14px}
+/* 综合榜固定列宽：插件名占剩下的空间，太长的省略、简介两行；数字始终看得见 */
+table.rank.ov{table-layout:fixed;min-width:0}
+table.rank.ov th,table.rank.ov td{padding-left:5px;padding-right:5px}
+table.rank.ov td.nm{overflow:hidden}
+table.rank.ov td.nm > .nmline{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.rank.ov td.nm .desc{min-width:0}
+table.rank.ov td.nm .chips{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.rank.ov .srcchip{margin-right:2px;padding:0 3px}
+table.rank.ov td.lks{width:112px}
 table.rank td .arch{font-size:10.5px;color:var(--t3);background:var(--soft);border-radius:5px;padding:1px 6px}
 .section h2 .h2-acts{margin-left:auto;display:inline-flex;gap:8px;align-items:center}
 .section h2 .h2-acts .ai{margin-left:0}
@@ -236,7 +254,7 @@ td.down{color:var(--bad);font-weight:600}
 /* 我的监控：和排行榜一样一行一个插件，上面是列名。名字和最后的图标宽度固定，
    中间各列用 minmax(0, 1fr) 平分剩下的宽度，栏变窄时一起压缩，放不下的用省略号 */
 /* 数字列留够短写数字（312k、#3088）的最小宽度，不会被截断；压缩主要由「分类」承担 */
-#watchList{--mcols:minmax(84px,3.4fr) minmax(36px,.7fr) minmax(0,1.2fr) minmax(40px,.9fr) minmax(32px,.8fr) minmax(30px,.7fr) minmax(36px,.8fr) auto}
+#watchList{--mcols:minmax(84px,3.4fr) minmax(36px,.7fr) minmax(0,1.2fr) minmax(40px,.9fr) minmax(32px,.8fr) minmax(30px,.7fr) minmax(36px,.8fr) 76px}
 .mrow{display:grid;grid-template-columns:var(--mcols);align-items:center;column-gap:6px;padding:8px 0;border-bottom:1px solid var(--soft);font-size:12px;color:var(--t2)}
 .mrow:last-child{border-bottom:none}
 .mrow.mhead{font-size:11px;color:var(--t3);font-weight:600;padding:0 0 7px;border-bottom:1px solid var(--line)}
@@ -247,7 +265,8 @@ td.down{color:var(--bad);font-weight:600}
 .mrow .nm{font-size:13px;font-weight:650;color:var(--text)}
 .mrow.mhead .nm{font-size:11px;font-weight:600;color:var(--t3)}
 .mrow .ver{color:var(--t3);font-weight:400;font-size:11px}
-.mrow .acts{display:flex;align-items:center;justify-content:flex-end;overflow:visible}
+/* 最后一列固定宽度（两个链接图标 + ×）：每一行是各自的网格，宽度要是按内容来，表头（空的）和数据行就对不齐 */
+.mrow .acts{display:flex;align-items:center;justify-content:flex-end;overflow:visible;width:76px}
 .mrow .livedot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:5px;vertical-align:middle}
 .mrow .x{appearance:none;border:none;background:none;color:var(--t3);cursor:pointer;font-size:16px;line-height:1;padding:0 2px 0 4px;flex:none}
 .mrow .x:hover{color:var(--bad)}
