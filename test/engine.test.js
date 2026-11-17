@@ -238,3 +238,20 @@ test('每日目录缺某个榜时，用随包自带的那份顶上', async () =>
   if (bundled.boards && bundled.boards.overall) assert.ok(cat.boards.overall, '缺的综合榜用自带的')
   reloadCatalog(null)
 })
+
+test('每日目录的综合榜没有分角度的分数时，用自带的', async () => {
+  const home = await tempHome()
+  const env = { DSH_HOME: home }
+  await mkdir(dirname(cachePath(env)), { recursive: true })
+  const remote = makeCatalog({ anchor: '2099-01-01' })
+  remote.boards = { overall: { total: 1, rows: [{ k: 'old', sc: 1 }] } } // 旧代码算的：没有 a
+  await writeFile(cachePath(env), JSON.stringify(remote))
+  reloadCatalog(null)
+  const cat = await loadCatalog({ env })
+  const { readFile } = await import('node:fs/promises')
+  const bundled = JSON.parse(await readFile(new URL('../data/catalog.json', import.meta.url), 'utf8'))
+  if (bundled.boards && bundled.boards.overall && bundled.boards.overall.rows[0].a) {
+    assert.ok(cat.boards.overall.rows[0].a, '换成了自带的、有角度分数的')
+  }
+  reloadCatalog(null)
+})

@@ -15,6 +15,8 @@
 //   POST /api-dsh-pick/uninstall    从 DSH 卸载本插件
 //   GET  /api-dsh-pick/installed    DSH 里已装的插件名（面板的「已安装」标记）
 //   GET  /api-dsh-pick/live?names=a,b  实时查 npm（「我的监控」的刷新，最多 30 个）
+//   GET  /api-dsh-pick/ai-pick      能不能用「AI 精选」（DSH 给不给插件调模型）
+//   POST /api-dsh-pick/ai-pick      AI 精选：用 DSH 当前的模型按需求挑插件 { need }
 //   GET  /api-dsh-pick/market       dsh-pick 的插件索引在不在 DSH「插件 → 发现」的索引源里
 //   POST /api-dsh-pick/market       把它加进去（设置页的按钮）
 //
@@ -32,6 +34,7 @@ import { registerTools } from './tools.js'
 import { loadCatalog, liveStats, parseWatchNames } from '../lib/engine.js'
 import { refreshCatalog, remoteState, CHECK_EVERY_MS } from '../lib/remote.js'
 import { ensureMarketSource, marketStatus } from '../lib/market-source.js'
+import { aiPick } from '../lib/ai-pick.js'
 
 /** 本包根目录：插件就是完整的 dsh-pick 包 */
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -259,6 +262,12 @@ export function apply(ctx) {
     profile = ctx.get && ctx.get('profileContext') && ctx.get('profileContext').name
   } catch { profile = undefined }
 
+  // AI 精选：DSH 的模型（llm 服务）和默认模型选择。都是可选的，老版本 DSH 没有就不显示这个按钮
+  let llm, defaultModel
+  ctx.inject(['llm'], (c) => { llm = c.llm || (c.get && c.get('llm')) })
+  ctx.inject(['agentDefaultModel'], (c) => { defaultModel = c.agentDefaultModel || (c.get && c.get('agentDefaultModel')) })
+  const canAiPick = () => Boolean(llm && typeof llm.stream === 'function' && defaultModel && typeof defaultModel.currentSelection === 'function')
+
   // DSH「插件 → 发现」的索引源（实验功能「自定义插件索引」打开时才有这个服务）：自动加一次 dsh-pick 的插件索引
   let pluginMarket
   ctx.inject(['pluginMarket'], (mCtx) => {
@@ -416,6 +425,27 @@ export function apply(ctx) {
           sendJson(res, 200, await liveStats(names))
         } catch (e) {
           sendJson(res, 502, { error: `查 npm 失败：${e.message}` })
+        }
+      },
+    }))
+
+    // AI 精选（点了才调用模型，花的是用户的 token）
+    track(ws.register({
+      kind: 'exact',
+      path: '/api-dsh-pick/ai-pick',
+      handler: async (req, res) => {
+        if (req.method === 'GET') return sendJson(res, 200, { available: canAiPick() })
+        if (!isSafePost(req)) return sendJson(res, 403, { ok: false, message: '只接受本页面发出的请求' })
+        if (!canAiPick()) return sendJson(res, 200, { ok: false, message: '这个版本的 DSH 不让插件直接调用模型，可以点「+AI 帮我挑」在对话里问' })
+        const { need } = await readJsonBody(req)
+        try {
+          const result = await aiPick({
+            need, catalog: await loadCatalog(), llm, defaultModel,
+            installed: (await installedNames(pluginManager)) || new Set(),
+          })
+          sendJson(res, 200, { ok: true, ...result })
+        } catch (e) {
+          sendJson(res, 200, { ok: false, message: e.code === 'empty' ? e.message : `AI 精选失败：${e.message}` })
         }
       },
     }))

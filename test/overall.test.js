@@ -1,7 +1,7 @@
 // 综合榜：几个插件市场合成一个榜
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildOverall, percentiles, spread, maintScore, MARKETS } from '../lib/overall.js'
+import { buildOverall, percentiles, spread, maintScore, stableScore, MARKETS, ANGLES } from '../lib/overall.js'
 import { picksMembers } from '../lib/boards.js'
 
 const NOW = Date.parse('2026-11-10T00:00:00Z')
@@ -14,6 +14,7 @@ test('percentiles / spread / maintScore', () => {
   assert.equal(sp[3], 1) // 最大的：百分位 1、比例 1
   assert.ok(sp[2] > sp[1])
   assert.equal(maintScore(['2026-11-10'], NOW), 1)
+  assert.equal(maintScore(['2026-09-20'], NOW), 1, '60 天内都算还在维护，不按发版频率加分')
   assert.equal(maintScore(['2026-01-01', null], NOW), 0) // 半年以上
   assert.equal(maintScore([null], NOW), null)
 })
@@ -82,4 +83,39 @@ test('dsh-m 精选：作者自己那个区不算推荐', () => {
     { id: 'bad', npm: '../x', github: 'not a repo', category: 'essentials' },
   ] })
   assert.deepEqual(rows.map(r => r.n), ['mine-too', 'theirs'])
+})
+
+test('稳定分：上架久、节奏平稳、有许可证、问题少的高', () => {
+  const good = stableScore({ firstDays: 200, cadence: 7, license: true, issues: 1, stars: 100 })
+  const churn = stableScore({ firstDays: 200, cadence: 0.2, license: true, issues: 1, stars: 100 })
+  const fresh = stableScore({ firstDays: 5, cadence: 7, license: true, issues: 1, stars: 100 })
+  assert.ok(good > churn, '发得太勤扣分')
+  assert.ok(good > fresh, '刚上架扣分')
+  assert.ok(good > 0.9)
+})
+
+test('六个角度：各自的分数；不参与的为 null；每个角度的前几名都会存下来', () => {
+  const deep = (base, growth) => ({ base, growth, cadence: 5, lastRelease: '2026-11-01', s: 70 })
+  const packages = {
+    old: pkg('old', { w: 9000, deep: deep(900, 0.1), gh: { repo: 'x/old', s: 500, l: 'MIT', i: 2 } }),
+    hot: pkg('hot', { w: 3000, deep: deep(200, 3) }),
+    tiny: pkg('tiny', { w: 10 }),
+  }
+  const members = {
+    community: [{ n: 'old', added: '2026-01-01' }, { n: 'hot', added: '2026-08-01' }, { n: 'tiny', added: '2026-11-08' }],
+    picks: [{ n: 'old' }], shop: [], official: [],
+  }
+  const o = buildOverall({ packages, members, now: NOW })
+  assert.deepEqual(o.angles, ANGLES)
+  const by = Object.fromEntries(o.rows.map(r => [r.k, r]))
+  assert.equal(by.tiny.a.use, null, '没有去噪数据不参与「最多人用」')
+  assert.equal(by.tiny.a.stable, null, '上架不满 60 天不参与「稳定可靠」')
+  assert.ok(by.tiny.a.new != null, '30 天内收录的进「新上架」')
+  assert.equal(by.old.a.new, null)
+  assert.ok(by.hot.a.rise > by.old.a.rise, '增速快的在「上升最快」靠前')
+  assert.ok(by.old.a.rep > 0, '有星标、被精选的有口碑分')
+  assert.equal(by.tiny.a.rep, null, '没有星标也没被精选的不参与「口碑」')
+  assert.equal(by.hot.g, 3)
+  assert.equal(by.tiny.added, '2026-11-08')
+  assert.equal(by.old.p[3], 100, '被 dsh-m 精选：精选项满分')
 })

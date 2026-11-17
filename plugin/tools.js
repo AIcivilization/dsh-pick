@@ -246,6 +246,7 @@ export async function buildToolDefinitions(deps = {}) {
         metric: { type: 'string', enum: ['weekly', 'baseline', 'growth', 'score', 'stars', 'pushed', 'downloads', 'newest'], description: '排序指标，默认 baseline（日常基线，最接近真实使用量）；stars = GitHub 星标，pushed = GitHub 最近提交' },
         category: { type: 'string', enum: CATS, description: '只看某一类（可省略）' },
         limit: { type: 'integer', description: '前几名，默认 10，最多 30' },
+        angle: { type: 'string', enum: ['rec', 'use', 'rep', 'stable', 'rise', 'new'], description: 'board=overall 时的排序角度：rec 综合推荐（默认）· use 最多人用（只看去噪基线）· rep 口碑（星标 + 精选/官方）· stable 稳定可靠 · rise 上升最快 · new 新上架' },
         board: { type: 'string', enum: ['overall', 'official', 'community', 'shop'], description: '看别的榜单（可省略，省略就是 npm / GitHub）：overall = 综合榜（几个插件市场合并去重，按综合分排，用户问「最值得装的」先用它）；official = DeepSeek 官方插件；community = awesome-dsh-plugin 社区目录（dshmarket 用的就是它）；shop = dsh-plugin-shop 插件商店（第三方）。community / shop 时 metric 可填 stars / downloads / newest' },
       },
       output: {
@@ -263,16 +264,29 @@ export async function buildToolDefinitions(deps = {}) {
           if (!o) return plain({ header: header(cat), board: '综合榜：还没有数据', rows: [] })
           const W = o.weights
           const LABEL = { dshmarket: 'dshmarket', 'dsh-m': 'dsh-m 精选', shop: 'dsh-plugin-shop', official: 'DeepSeek 官方' }
+          const ANGLE = { rec: '综合推荐', use: '最多人用（去噪基线）', rep: '口碑（星标 + 精选/官方）', stable: '稳定可靠', rise: '上升最快（近 7 日增速）', new: '新上架（30 天内被收录）' }
+          const angle = ANGLE[args.angle] && o.rows[0] && o.rows[0].a ? args.angle : 'rec'
+          const val = r => (r.a ? r.a[angle] : r.sc)
           const category = CATS.includes(args.category) ? args.category : null
           const have = await installed()
-          const rows = o.rows.filter(r => !category || (r.n && cat.packages[r.n] && cat.packages[r.n].cat === category)).slice(0, limit)
+          const rows = o.rows
+            .filter(r => val(r) != null && (!category || (r.n && cat.packages[r.n] && cat.packages[r.n].cat === category)))
+            .sort((x, y) => angle === 'new' ? String(y.added || '').localeCompare(String(x.added || '')) || val(y) - val(x) : val(y) - val(x))
+            .slice(0, limit)
+          const parts = r => (r.p && r.p.length >= 6
+            ? `使用 ${r.p[0]} · 关注 ${r.p[1]} · 维护 ${r.p[2]} · 精选 ${r.p[3]} · 稳定 ${r.p[4]} · 覆盖 ${r.p[5]}`
+            : (r.p || []).join(' · '))
+          const formula = W.curated != null
+            ? `综合推荐 = 使用 ${W.use}% + 关注 ${W.stars}% + 维护 ${W.maint}% + 精选 ${W.curated}% + 稳定 ${W.stable}% + 覆盖 ${W.reach}%`
+            : `综合分 = ${Object.entries(W).map(([k, v]) => `${k} ${v}%`).join(' + ')}`
           return plain({
             header: header(cat),
-            board: `综合榜（${num(o.total)} 个插件参与排名；综合分 = 使用 ${W.use}% + 关注 ${W.stars}% + 维护 ${W.maint}% + 共识 ${W.consensus}% + 健康 ${W.health}%，各项 0~100）`,
+            board: `综合榜 · ${ANGLE[angle]}（${num(o.total)} 个插件参与排名；${formula}，各项 0~100）`,
             rows: rows.map((r, i) => {
               const rec = r.n ? cat.packages[r.n] : null
               const name = r.n || r.name
-              return `${i + 1}. ${name} · 综合分 ${r.sc}（使用 ${r.p[0]} · 关注 ${r.p[1]} · 维护 ${r.p[2]} · 共识 ${r.p[3]} · 健康 ${r.p[4]}）` +
+              const angleNote = angle === 'rec' ? '' : angle === 'rise' && r.g != null ? ` · 近 7 日增速 ${Math.round(r.g * 100)}%` : angle === 'new' && r.added ? ` · ${r.added} 被收录` : ` · ${ANGLE[angle]}分 ${val(r)}`
+              return `${i + 1}. ${name} · 综合推荐 ${r.sc}（${parts(r)}）${angleNote}` +
                 ` · 收录于 ${r.src.map(k => LABEL[k] || k).join('、') || '（只在 npm）'}` +
                 (rec ? ` · 周下载 ${num(rec.w)}` : r.w != null ? ` · 周下载 ${num(r.w)}` : '') +
                 (r.s != null ? ` · ★${num(r.s)}` : '') +

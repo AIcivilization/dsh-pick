@@ -256,6 +256,7 @@ async function onInstallClick(btn) {
       toast(j.restart ? `${name} 已安装，重启 DSH 后生效` : `${name} 已安装`)
       renderCands($('#need').value.trim())
       renderRank()
+      renderAi()
       return
     }
     toast(j.message || '安装失败', j.command)
@@ -359,6 +360,7 @@ async function boot() {
     gapNote
 
   await loadInstalled()
+  await loadAiAvailable()
   if (IN_DSH) {
     ;['#aiCands', '#aiVerdict', '#aiWatch'].forEach(id => $(id).classList.remove('hidden'))
     $('#verdictCap').textContent = '以下判断由本地规则给出，只看数字。点「+AI 帮我判断」，让对话里的 AI 结合你的具体场景解释取舍。'
@@ -379,6 +381,22 @@ async function boot() {
 
 function bindEvents() {
   $('#btnFind').addEventListener('click', doSearch)
+  $('#btnAi').addEventListener('click', runAiPick)
+  // 比较清单：输入插件名加入
+  const addInput = $('#addCmp')
+  addInput.addEventListener('input', () => { sugItems = suggest(addInput.value); sugOn = sugItems.length ? 0 : -1; renderSug() })
+  addInput.addEventListener('keydown', e => {
+    if (!sugItems.length) return
+    if (e.key === 'ArrowDown') { sugOn = (sugOn + 1) % sugItems.length; renderSug(); e.preventDefault() }
+    else if (e.key === 'ArrowUp') { sugOn = (sugOn - 1 + sugItems.length) % sugItems.length; renderSug(); e.preventDefault() }
+    else if (e.key === 'Enter' && sugOn >= 0) { addFromSug(sugItems[sugOn].n); e.preventDefault() }
+    else if (e.key === 'Escape') { sugItems = []; renderSug() }
+  })
+  addInput.addEventListener('blur', () => setTimeout(() => { sugItems = []; renderSug() }, 150))
+  $('#addSug').addEventListener('mousedown', e => {
+    const o = e.target.closest('[data-add]')
+    if (o) { e.preventDefault(); addFromSug(o.dataset.add) }
+  })
   $('#need').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch() })
 
   document.querySelectorAll('.examples .chip').forEach(c => {
@@ -416,6 +434,13 @@ function bindEvents() {
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-watch]')
     if (b) toggleWatch(b.dataset.watch)
+    const un = e.target.closest('[data-unpick]')
+    if (un) togglePick(un.dataset.unpick)
+    const pk = e.target.closest('#aiList [data-pick]')
+    if (pk) togglePick(pk.dataset.pick)
+    // AI 精选里的「安装」（搜索结果卡片上的由卡片自己处理）
+    const ai = e.target.closest('#aiList [data-install]')
+    if (ai) onInstallClick(ai)
     // 排行榜里的「安装」（搜索结果卡片上的由卡片自己处理）
     const ib = e.target.closest('#rankBody [data-install]')
     if (ib) onInstallClick(ib)
@@ -488,11 +513,106 @@ function renderCands(need, { keepCompat = false } = {}) {
 function togglePick(name) {
   if (picked.includes(name)) picked = picked.filter(x => x !== name)
   else {
-    if (picked.length >= 6) { alert('最多比较 6 个'); return }
+    if (picked.length >= 6) { toast('最多比较 6 个，先移除一个'); return }
     picked.push(name)
   }
-  renderCands($('#need').value.trim())
+  if (cands.length) renderCands($('#need').value.trim())
+  renderPickBar()
+  renderAi()
   renderCompare()
+}
+
+/* ---------------- 比较清单：搜索结果之外的插件也能加进来 ---------------- */
+function renderPickBar() {
+  $('#pickChips').innerHTML = picked.length
+    ? picked.map(n => `<span class="pickchip">${esc(n)}<button data-unpick="${esc(n)}" title="移出比较" aria-label="把 ${esc(n)} 移出比较">×</button></span>`).join('')
+    : '<span class="none">还没有，点候选卡片或在右边输入插件名</span>'
+}
+
+let sugItems = []
+let sugOn = -1
+/** 按名字找插件：名字开头吻合的优先，其次名字里包含、关键字吻合；同档按周下载 */
+function suggest(q) {
+  q = q.trim().toLowerCase()
+  if (q.length < 2) return []
+  const out = []
+  for (const r of Object.values(CAT.packages)) {
+    const n = r.n.toLowerCase()
+    const tier = n.startsWith(q) || n.split('/').pop().startsWith(q) ? 0 : n.includes(q) ? 1 : (r.kw || []).some(k => String(k).toLowerCase() === q) ? 2 : -1
+    if (tier >= 0) out.push([tier, r])
+  }
+  return out.sort((a, b) => a[0] - b[0] || (b[1].w || 0) - (a[1].w || 0)).slice(0, 8).map(x => x[1])
+}
+function renderSug() {
+  const box = $('#addSug')
+  if (!sugItems.length) { box.classList.add('hidden'); return }
+  box.innerHTML = sugItems.map((r, i) => `<div class="opt${i === sugOn ? ' on' : ''}" data-add="${esc(r.n)}" role="option">` +
+    `<b>${esc(r.n)}</b>${picked.includes(r.n) ? ' <em style="color:var(--ok-text);font-style:normal;font-size:11px">已在清单里</em>' : ''}` +
+    `<span>周下载 ${short(r.w)}${r.sc != null ? ` · 综合分 ${r.sc}` : ''} · ${esc(String(r.d || '').slice(0, 60))}</span></div>`).join('')
+  box.classList.remove('hidden')
+}
+function addFromSug(name) {
+  if (!picked.includes(name)) togglePick(name)
+  $('#addCmp').value = ''
+  sugItems = []
+  renderSug()
+  $('#secCmp').scrollIntoView({ block: 'nearest' })
+}
+
+/* ---------------- AI 精选：用 DSH 当前的模型挑插件 ---------------- */
+let AI_AVAILABLE = false
+let LAST_AI = null
+async function runAiPick() {
+  const need = $('#need').value.trim()
+  if (!need) { toast('先写下你想解决什么问题'); $('#need').focus(); return }
+  const btn = $('#btnAi')
+  btn.disabled = true
+  btn.textContent = 'AI 挑选中…'
+  $('#secAi').classList.remove('hidden')
+  $('#aiMeta').textContent = ''
+  $('#aiList').innerHTML = '<div class="ai-wait">正在用你的模型挑选：读懂需求 → 从全部目录里召回候选 → 逐个判断。通常要 10～40 秒…</div>'
+  try {
+    const r = await fetch('/api-dsh-pick/ai-pick', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ need }) })
+    const j = await r.json()
+    if (!j.ok) {
+      LAST_AI = null
+      $('#aiList').innerHTML = `<div class="ai-wait" style="color:var(--warn-text)">${esc(j.message || 'AI 精选失败')}</div>`
+    } else {
+      LAST_AI = { ...j, need }
+      renderAi()
+    }
+  } catch (e) {
+    $('#aiList').innerHTML = `<div class="ai-wait" style="color:var(--warn-text)">AI 精选请求失败：${esc(e.message)}</div>`
+  }
+  btn.disabled = false
+  btn.textContent = 'AI 精选'
+}
+function renderAi() {
+  const j = LAST_AI
+  if (!j) return
+  $('#aiMeta').textContent = `「${j.need}」· 模型 ${j.model || '—'} · 从 ${j.candidates} 个候选里挑出 ${j.picks.length} 个`
+  const kw = j.keywords && j.keywords.length ? `<div class="data" style="margin-bottom:8px">模型用来搜索的关键字：${j.keywords.map(esc).join('、')}</div>` : ''
+  const note = j.note ? `<div class="why" style="margin-bottom:10px">${esc(j.note)}</div>` : ''
+  $('#aiList').innerHTML = note + kw + (j.picks.length ? j.picks.map(p => {
+    const rec = CAT.packages[p.name] || { n: p.name }
+    const d = rec.deep
+    const on = picked.includes(p.name)
+    return `<div class="aip">` +
+      `<div class="top"><span class="nm">${esc(p.name)}</span>${rec.v ? `<span style="color:var(--t3);font-size:11px">v${esc(rec.v)}</span>` : ''}<span class="fit" title="模型判断的合适程度（0~100）">合适度 ${p.fit}</span></div>` +
+      (p.reason ? `<div class="why">${esc(p.reason)}</div>` : '') +
+      (p.caveat ? `<div class="cav">⚠ ${esc(p.caveat)}</div>` : '') +
+      `<div class="data">周下载 ${short(rec.w)}${d ? ` · 日常基线 ${short(d.base)}/天` : ''}${rec.gh ? ` · ★ ${short(rec.gh.s)}` : ''}${rec.sc != null ? ` · 综合分 ${rec.sc}` : ''}${d && d.age != null ? ` · ${ageText(d.age)}更新` : ''}</div>` +
+      `<div class="acts"><button class="cmpbtn${on ? ' on' : ''}" data-pick="${esc(p.name)}">${on ? '✓ 已加入比较' : '加入比较'}</button>${watchBtn(p.name)}${installArea(rec)}${linkBtns(rec, { icon: true })}</div>` +
+    `</div>`
+  }).join('') : '<div class="ai-wait">模型觉得目录里没有真正合适的。可以换个说法，或看看下面的关键字搜索结果。</div>')
+}
+
+async function loadAiAvailable() {
+  if (!IN_DSH) return
+  try {
+    AI_AVAILABLE = Boolean((await (await fetch('/api-dsh-pick/ai-pick', { cache: 'no-store' })).json()).available)
+  } catch { AI_AVAILABLE = false }
+  $('#btnAi').classList.toggle('hidden', !AI_AVAILABLE)
 }
 
 /* ---------------- 第 3 步：比较 ---------------- */
@@ -696,35 +816,64 @@ function srcChips(src, { short = false } = {}) {
  * 综合榜：几个插件市场合成一个榜（每日构建时算好，见 lib/overall.js），一个插件一行。
  * npm 上的插件能直接装；只在 GitHub 上的先只展示
  */
+// 综合榜的六个角度：同一份数据，权重不同（算法见 lib/overall.js），每个角度的说明写在页面上
+const ANGLE_INFO = {
+  rec: { label: '综合', cap: W => `综合推荐 = 使用 ${W.use}%（日常基线，没有的按周下载折算）+ 关注 ${W.stars}%（GitHub 星标）+ 维护 ${W.maint}%（60 天内有发版或提交就满分）+ 精选 ${W.curated}%（dsh-m 精选、DeepSeek 官方）+ 稳定 ${W.stable}% + 覆盖 ${W.reach}%（被几个市场收录）。鼠标停在分数上看明细。` },
+  use: { label: '使用', cap: () => '最多人用：只看去噪后的日常基线（扣掉发版拉取的虚高，最接近真实使用量）。没有去噪数据的插件不参与。' },
+  rep: { label: '口碑', cap: () => '口碑：GitHub 星标 65% + 被 dsh-m 精选或 DeepSeek 官方收录 35%。注意：有些插件的仓库是它所属的大项目，星标属于整个项目。' },
+  stable: { label: '稳定', cap: () => '稳定可靠：上架满 60 天、还在维护；看版本节奏是否平稳（发得太勤扣分）、有没有许可证、未关闭的问题多不多，再加一点使用量。' },
+  rise: { label: '增速', cap: () => '上升最快：日常基线每天至少 20 次的插件里，按近 7 日环比增速排。小插件的增速容易大起大落，参考看。' },
+  new: { label: '收录', cap: () => '新上架：最近 30 天才被插件市场收录的，越新越靠前，同一天的按使用量排。' },
+}
+
+/**
+ * 综合榜：几个插件市场合成一个榜（每日构建时算好，见 lib/overall.js），一个插件一行。
+ * 顶部选角度；npm 上的插件能直接装，只在 GitHub 上的先只展示
+ */
 function renderOverall() {
   const data = CAT.boards && CAT.boards.overall
-  const W = (data && data.weights) || { use: 40, stars: 20, maint: 20, consensus: 10, health: 10 }
+  const onChip = document.querySelector('#rankFilters .chip.on[data-board="overall"]')
+  // 旧数据（每日目录还没用新代码构建）没有分角度的分数：只能看综合
+  const hasAngles = Boolean(data && data.rows.length && data.rows[0].a)
+  const angle = hasAngles && onChip ? onChip.dataset.m : 'rec'
+  document.querySelectorAll('#rankFilters .chip[data-board="overall"]').forEach(c => c.classList.toggle('hidden', !hasAngles))
+  const W = (data && data.weights) || {}
+  const info = ANGLE_INFO[angle]
   $('#rankCap').textContent = `把 dshmarket、dsh-m 精选、dsh-plugin-shop 商店、DeepSeek 官方几个市场合成一个榜，一个插件只出现一次。` +
-    `综合分 = 使用 ${W.use}% + 关注 ${W.stars}% + 维护 ${W.maint}% + 共识 ${W.consensus}% + 健康 ${W.health}%（鼠标停在分数上看明细）；` +
-    `仓库已归档、DSH 装不了的不进榜。${data ? `共 ${num(data.total)} 个插件参与排名。` : ''}`
+    `${info.cap(W)}仓库已归档、DSH 装不了的不进榜。${data ? `共 ${num(data.total)} 个插件参与排名。` : ''}`
   if (!data || !data.rows.length) {
     $('#rankHead').innerHTML = ''
     $('#rankBody').innerHTML = '<tr><td class="empty">还没有综合榜的数据（每日更新取到后就有）。</td></tr>'
     return
   }
   const cat = $('#rankCat').value
-  const rows = data.rows
+  const valueOf = r => (hasAngles ? r.a[angle] : r.sc)
+  let rows = data.rows
+    .filter(r => valueOf(r) != null)
     .map(r => ({ r, rec: r.n ? CAT.packages[r.n] : null }))
     .filter(({ rec }) => !cat || (rec && rec.cat === cat))
-    .slice(0, 60)
+  rows.sort((x, y) => angle === 'new'
+    ? String(y.r.added || '').localeCompare(String(x.r.added || '')) || valueOf(y.r) - valueOf(x.r)
+    : valueOf(y.r) - valueOf(x.r))
+  rows = rows.slice(0, 60)
   // 固定列宽（table.ov）：数字列和操作列宽度固定，插件名占剩下的；不然简介把名字一列撑得很宽，
   // 右边固定的操作列正好盖住数字
   $('#rankHead').innerHTML = '<tr><th style="width:26px">#</th><th>插件</th>' +
-    '<th class="r" style="width:34px" title="综合分 0~100">综合</th><th class="r" style="width:44px">周下载</th>' +
+    `<th class="r" style="width:38px" title="这个角度的分数 0~100">${info.label}</th><th class="r" style="width:44px">周下载</th>` +
     '<th class="r" style="width:38px" title="GitHub 星标">★</th><th class="r" style="width:46px" title="最近一次发版或提交">最近</th>' +
     '<th style="width:112px"></th></tr>'
-  $('#rankBody').innerHTML = rows.map(({ r, rec }, i) => {
+  $('#rankBody').innerHTML = rows.length ? rows.map(({ r, rec }, i) => {
     const name = r.n || r.name
     const v = rec ? rec.v : r.v
     const w = rec ? rec.w : r.w
     const desc = rec ? rec.d : r.d
-    const [pu, ps, pm, pc, ph] = r.p
-    const why = `使用 ${pu} · 关注 ${ps} · 维护 ${pm} · 共识 ${pc} · 健康 ${ph}（各项 0~100）`
+    const P = r.p || []
+    const why = r.p && r.p.length >= 6
+      ? `综合推荐 ${r.sc}：使用 ${P[0]} · 关注 ${P[1]} · 维护 ${P[2]} · 精选 ${P[3]} · 稳定 ${P[4]} · 覆盖 ${P[5]}（各项 0~100）`
+      : `综合分 ${r.sc}`
+    const cell = angle === 'rise' && r.g != null ? `<span class="sc" title="近 7 日环比 ${pct(r.g)}；${why}">${pct(r.g)}</span>`
+      : angle === 'new' && r.added ? `<span class="sc" title="${esc(r.added)} 被市场收录；${why}" style="font-size:11px">${esc(r.added.slice(5))}</span>`
+        : `<span class="sc" title="${why}">${valueOf(r)}</span>`
     const age = daysSince(r.last)
     // 能装的：目录里的 npm 包按装前检查给按钮；官方插件不在目录里，名字核对过，也能装
     const inst = r.n ? installArea(rec || { n: r.n }, { icon: true }) : ''
@@ -733,12 +882,12 @@ function renderOverall() {
       `<td class="nm"><div class="nmline" title="${esc(name)}${v ? ' v' + esc(v) : ''}">${esc(name)}${v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(v)}</span>` : ''}</div>` +
         `<div class="chips">${srcChips(r.src, { short: true })}${r.n ? '' : '<span class="srcchip gh" title="只在 GitHub，没发到 npm">GitHub</span>'}</div>` +
         (desc ? `<div class="sub desc" title="${esc(desc)}">${esc(desc)}</div>` : '') + `</td>` +
-      `<td class="r"><span class="sc" title="${why}">${r.sc}</span></td>` +
+      `<td class="r">${cell}</td>` +
       `<td class="r">${w != null ? short(w) : '—'}</td>` +
       `<td class="r">${r.s != null ? short(r.s) : '—'}</td>` +
       `<td class="r" title="${esc(r.last || '')}"><span${age != null && age > 90 ? ' class="stale"' : ''}>${age != null ? ageText(age) : '—'}</span></td>` +
       `<td class="lks">${watchBtn(r.k)}${inst}${links}</td></tr>`
-  }).join('')
+  }).join('') : '<tr><td colspan="7" class="empty">这个角度下没有插件（或这个分类里没有）。</td></tr>'
 }
 
 function renderRank() {
@@ -746,6 +895,7 @@ function renderRank() {
   document.querySelector('table.rank').classList.toggle('ov', board === 'overall')
   if (board === 'overall') {
     $('#rankCat').classList.remove('hidden')
+    // 角度选单只在综合榜显示（data-board="overall" 的 chip 由切换榜单的逻辑统一显示 / 隐藏）
     renderOverall()
     return
   }

@@ -98,9 +98,29 @@ test('pick_rank 看综合榜', async () => {
   reloadCatalog(cat)
   const v = await tool.pick_rank.execute({ board: 'overall' }, {})
   const t = text('pick_rank', {}, v)
-  assert.match(t, /综合榜（2 个插件参与排名/)
-  assert.match(t, /^1\. dsh-mnemon · 综合分 88/m)
+  assert.match(t, /综合榜 · 综合推荐（2 个插件参与排名/) // 旧数据（没有分角度的分数）也能看
+  assert.match(t, /^1\. dsh-mnemon · 综合推荐 88/m)
   assert.match(t, /收录于 dshmarket、dsh-plugin-shop/)
   assert.match(t, /（已安装）/)
   assert.match(t, /只在 GitHub（https:\/\/github.com\/y\/only）/)
+})
+
+test('pick_rank 综合榜按角度排', async () => {
+  const { makeCatalog: mk } = await import('./fixtures.js')
+  const cat = mk()
+  const W = { use: 30, stars: 15, maint: 15, curated: 15, stable: 15, reach: 10 }
+  cat.boards = { overall: { total: 2, weights: W, rows: [
+    { k: 'dsh-mnemon', n: 'dsh-mnemon', sc: 88, a: { rec: 88, use: 60, rep: 40, stable: 70, rise: null, new: null }, p: [90, 80, 97, 0, 70, 50], src: ['dshmarket'] },
+    { k: 'meow-memory', n: 'meow-memory', sc: 70, a: { rec: 70, use: 90, rep: 80, stable: null, rise: 95, new: 50 }, g: 0.77, added: '2026-11-10', p: [70, 60, 50, 100, 40, 25], src: ['dsh-m'] },
+  ] } }
+  reloadCatalog(cat)
+  const use = text('pick_rank', {}, await tool.pick_rank.execute({ board: 'overall', angle: 'use' }, {}))
+  assert.match(use, /综合榜 · 最多人用/)
+  assert.match(use, /^1\. meow-memory/m)
+  const rise = text('pick_rank', {}, await tool.pick_rank.execute({ board: 'overall', angle: 'rise' }, {}))
+  assert.match(rise, /近 7 日增速 77%/)
+  assert.doesNotMatch(rise, /dsh-mnemon/) // 不参与这个角度的不列
+  const rec = text('pick_rank', {}, await tool.pick_rank.execute({ board: 'overall' }, {}))
+  assert.match(rec, /精选 15%/)
+  assert.match(rec, /^1\. dsh-mnemon/m)
 })

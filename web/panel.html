@@ -115,6 +115,33 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px}
 table.rank td.nm .sub{font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px}
 table.rank td.nm .desc{min-width:150px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 /* 综合榜：收录于哪几个市场 */
+/* 比较清单 */
+.pickbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:12px}
+.pickbar .lbl{color:var(--t3);font-weight:600}
+.pickbar .none{color:var(--t3)}
+.pickchip{display:inline-flex;align-items:center;gap:4px;background:var(--accent-bg);color:var(--accent);border-radius:12px;padding:2px 4px 2px 9px;font-weight:600}
+.pickchip button{appearance:none;border:none;background:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 3px}
+.addwrap{position:relative;flex:1;min-width:160px}
+.addwrap input{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;font-family:inherit;background:var(--input);color:var(--text)}
+.addwrap input:focus{outline:none;border-color:var(--accent)}
+.sug{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:50;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 6px 18px var(--shadow);max-height:300px;overflow:auto}
+.sug .opt{padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--soft)}
+.sug .opt:last-child{border-bottom:none}
+.sug .opt.on,.sug .opt:hover{background:var(--accent-bg)}
+.sug .opt b{color:var(--text);font-size:12.5px}
+.sug .opt span{display:block;color:var(--t3);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* AI 精选 */
+.aip{border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:9px;background:var(--input)}
+.aip .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.aip .nm{font-weight:650;font-size:13.5px;color:var(--text)}
+.aip .fit{font-size:11px;font-weight:700;color:var(--ai);background:color-mix(in srgb,var(--ai) 14%,transparent);border-radius:10px;padding:1px 8px}
+.aip .why{font-size:12.5px;color:var(--text);margin:6px 0 2px;line-height:1.55}
+.aip .cav{font-size:11.5px;color:var(--warn-text)}
+.aip .data{font-size:11px;color:var(--t3);margin-top:5px;font-variant-numeric:tabular-nums}
+.aip .acts{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.aip .cmpbtn{appearance:none;font-family:inherit;font-size:11px;font-weight:600;border:1px solid var(--line);border-radius:6px;padding:2px 9px;background:var(--panel);color:var(--t2);cursor:pointer}
+.aip .cmpbtn.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.ai-wait{color:var(--t3);font-size:12.5px;padding:8px 0}
 .srcchip{display:inline-block;font-size:10px;font-weight:500;color:var(--t2);background:var(--soft);border-radius:4px;padding:0 5px;margin:2px 3px 0 0;white-space:nowrap}
 .srcchip.off{color:var(--accent);background:var(--accent-bg)}
 .srcchip.gh{color:var(--t3)}
@@ -358,6 +385,7 @@ td.down{color:var(--bad);font-weight:600}
       <div class="row">
         <input id="need" placeholder="例如：我想装个数据库 / 我想让 DSH 能连微信 / 记忆能力" autocomplete="off">
         <button class="btn" id="btnFind">找候选</button>
+        <button class="btn ghost hidden" id="btnAi" title="用 DSH 当前的大模型读懂你的需求，再从目录里挑真正合适的（会消耗你的模型额度）">AI 精选</button>
       </div>
       <div class="examples">
         <span>试试：</span>
@@ -369,6 +397,21 @@ td.down{color:var(--bad);font-weight:600}
         <button class="chip">费用统计</button>
         <button class="chip">远程服务器</button>
       </div>
+      <!-- 比较清单：搜索结果之外的插件，输入名字也能加进来比较 -->
+      <div class="pickbar">
+        <span class="lbl">比较清单</span>
+        <span id="pickChips"><span class="none">还没有，点候选卡片或在右边输入插件名</span></span>
+        <span class="addwrap">
+          <input id="addCmp" placeholder="输入插件名，加入比较" autocomplete="off" aria-label="输入插件名，加入比较">
+          <div id="addSug" class="sug hidden" role="listbox"></div>
+        </span>
+      </div>
+    </div>
+
+    <div class="section hidden" id="secAi">
+      <h2><span class="n">✦</span>AI 精选 <span style="font-size:11.5px;color:var(--t3);font-weight:500" id="aiMeta"></span></h2>
+      <p class="cap">用 DSH 当前的大模型：先把需求展开成一组关键字，从全部目录里召回候选，再逐个读简介和数据，挑出真正能解决问题的。理由是模型写的，数字来自目录。</p>
+      <div id="aiList"></div>
     </div>
 
     <div class="section hidden" id="secCand">
@@ -412,6 +455,12 @@ td.down{color:var(--bad);font-weight:600}
       </div>
       <p class="cap" id="rankCap"></p>
       <div class="filters" id="rankFilters">
+        <button class="chip on" data-board="overall" data-m="rec">综合推荐</button>
+        <button class="chip" data-board="overall" data-m="use">最多人用</button>
+        <button class="chip" data-board="overall" data-m="rep">口碑</button>
+        <button class="chip" data-board="overall" data-m="stable">稳定可靠</button>
+        <button class="chip" data-board="overall" data-m="rise">上升最快</button>
+        <button class="chip" data-board="overall" data-m="new">新上架</button>
         <button class="chip on hidden" data-board="npm" data-m="base">日常基线</button>
         <button class="chip hidden" data-board="npm" data-m="w">周下载</button>
         <button class="chip hidden" data-board="npm" data-m="growth">增速最快</button>

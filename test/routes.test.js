@@ -42,6 +42,16 @@ const market = { urls: ['https://other.example/index.json'] }
 market.listIndexes = async () => market.urls.map(url => ({ url }))
 market.setIndexes = async urls => { market.urls = [...urls] }
 
+// 假模型：第一次给关键字，第二次给挑选结果
+let llmCalls = 0
+const fakeLlm = {
+  async * stream() {
+    llmCalls++
+    yield { type: 'text-delta', text: llmCalls % 2 ? '{"keywords":["memory"]}' : '{"picks":[{"name":"meow-memory","fit":80,"reason":"跨会话记忆"}]}' }
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  },
+}
+
 const routes = {}
 const stops = []
 plugin.apply({
@@ -51,6 +61,8 @@ plugin.apply({
     if (deps[0] === 'webServer') fn({ webServer: { register: d => { routes[d.path] = d.handler } } })
     if (deps[0] === 'pluginManager') fn({ pluginManager: pm })
     if (deps[0] === 'pluginMarket') fn({ pluginMarket: market })
+    if (deps[0] === 'llm') fn({ llm: fakeLlm })
+    if (deps[0] === 'agentDefaultModel') fn({ agentDefaultModel: { currentSelection: () => ({ provider: 'p', model: 'm-1' }) } })
   },
 })
 await new Promise(r => setTimeout(r, 30)) // 等 apply 里读完 package.json
@@ -283,4 +295,14 @@ test('「发现」的索引源：启动时自动加上；接口能查状态；�
   assert.equal(r.ok, true)
   assert.ok(market.urls.includes(INDEX_URL))
   assert.equal((await post('market', {}, { origin: 'http://evil.example' })).status, 403)
+})
+
+test('AI 精选接口：查得到能不能用；POST 返回挑选结果；只收同源 JSON', async () => {
+  assert.deepEqual(await get('ai-pick'), { available: true })
+  const r = await post('ai-pick', { need: '让 DSH 记住以前的对话' })
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.picks.map(p => p.name), ['meow-memory'])
+  assert.equal(r.model, 'm-1')
+  assert.match((await post('ai-pick', { need: '' })).message, /先写下/)
+  assert.equal((await post('ai-pick', { need: 'x' }, { origin: 'http://evil.example' })).status, 403)
 })
