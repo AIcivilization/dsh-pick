@@ -255,3 +255,25 @@ test('每日目录的综合榜没有分角度的分数时，用自带的', async
   }
   reloadCatalog(null)
 })
+
+test('每日目录的包上没有六个角度的分数（rec.oa）时，综合榜和分数都用自带的', async () => {
+  const home = await tempHome()
+  const env = { DSH_HOME: home }
+  await mkdir(dirname(cachePath(env)), { recursive: true })
+  const { readFile } = await import('node:fs/promises')
+  const bundled = JSON.parse(await readFile(new URL('../data/catalog.json', import.meta.url), 'utf8'))
+  const withOA = Object.values(bundled.packages).find(r => r.oa)
+  assert.ok(withOA, '自带目录要带 rec.oa（用新代码构建）')
+  const remote = makeCatalog({ anchor: '2099-01-01' })
+  remote.packages[withOA.n] = { n: withOA.n, v: '9.9.9', w: 1 }
+  const rows = [{ k: withOA.n, n: withOA.n, sc: 1, a: { rec: 1 } }] // 有角度，但包上没有 oa
+  remote.boards = { overall: { total: 1, rows } }
+  await writeFile(cachePath(env), JSON.stringify(remote))
+  reloadCatalog(null)
+  const cat = await loadCatalog({ env })
+  assert.equal(cat.source, 'remote')
+  assert.deepEqual(cat.packages[withOA.n].oa, withOA.oa)
+  assert.equal(cat.packages[withOA.n].v, '9.9.9', '别的字段还是每日目录的')
+  assert.notDeepEqual(cat.boards.overall.rows, rows)
+  reloadCatalog(null)
+})

@@ -266,7 +266,9 @@ test('实时数据：去 npm 查监控列表里的包', async () => {
   assert.equal(m.weekly, 9000) // 周下载用搜索接口的（和目录同一口径），按包名精确匹配
   assert.equal(m.monthly, 30000)
   assert.equal(m.latest, '9.9.9')
-  assert.equal(m.daily, undefined) // 30 天日序列不发给界面
+  assert.equal(m.daily.length, 30) // 30 天每日下载（「我的监控」画走势图）
+  assert.equal(m.dailyStart, '2026-09-19')
+  assert.equal(m.keywords, undefined)
   assert.equal(r.rows[1].found, false)
   assert.equal(m.gh.s, 121) // GitHub 实时数据（按目录里登记的仓库查）
   assert.equal(m.gh.p, '2026-10-22')

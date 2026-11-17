@@ -119,3 +119,15 @@ test('六个角度：各自的分数；不参与的为 null；每个角度的前
   assert.equal(by.tiny.added, '2026-11-08')
   assert.equal(by.old.p[3], 100, '被 dsh-m 精选：精选项满分')
 })
+
+test('每个参与排名的 npm 包都带六个角度的分数（rec.oa）：面板按分类筛、算名次都在全部插件里排', () => {
+  const packages = { ok: pkg('ok', { w: 50 }), tiny: pkg('tiny', { w: 3 }), arch: pkg('arch', { gh: { repo: 'x/arch', s: 1, a: true } }) }
+  const members = { community: [{ n: 'tiny', added: '2026-11-08' }], picks: [], shop: [], official: [] }
+  const o = buildOverall({ packages, members, now: NOW })
+  assert.equal(packages.ok.oa.length, ANGLES.length)
+  assert.equal(packages.ok.oa[0], packages.ok.sc, '第一个是综合推荐')
+  const row = o.rows.find(r => r.k === 'tiny')
+  assert.deepEqual(packages.tiny.oa, ANGLES.map(k => row.a[k]))
+  assert.equal(packages.tiny.ad, '2026-11-08')
+  assert.equal(packages.arch.oa, undefined, '不进榜的不带')
+})

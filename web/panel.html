@@ -232,6 +232,14 @@ table.cmp th:first-child,table.cmp td:first-child{text-align:left;color:var(--t3
 table.cmp thead th{color:var(--text);font-weight:650;font-size:12.5px}
 table.cmp thead th i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
 table.cmp tbody tr:last-child td{border-bottom:none}
+/* 监控详情：第一列（指标名）固定，插件多了横向滚动 */
+table.cmp.wd{min-width:0}
+table.cmp.wd th:first-child,table.cmp.wd td:first-child{position:sticky;left:0;background:var(--panel);z-index:1}
+table.cmp.wd td{font-size:12px;padding:7px 9px}
+table.cmp.wd .ch{display:block;font-size:10.5px;font-weight:600}
+table.cmp.wd .ch.up{color:var(--ok)}table.cmp.wd .ch.down{color:var(--bad)}table.cmp.wd .ch.flat{color:var(--t3);font-weight:400}
+table.cmp.wd .grp td{background:var(--soft);color:var(--t3);font-size:10.5px;font-weight:700;padding:4px 9px;text-align:left}
+table.cmp.wd svg.spark{display:block;margin-left:auto}
 td.best{color:var(--ok);font-weight:700}
 td.best::after{content:' ★';font-size:9px}
 .miss{color:var(--mute)}
@@ -265,6 +273,15 @@ table.rank td.mt .stale{color:var(--warn-text);font-weight:600}
 /* 只有图标的外链（排行榜） */
 table.rank td.lks{white-space:nowrap;width:1%;position:sticky;right:0;background:var(--panel);box-shadow:-6px 0 6px -6px var(--shadow)}
 table.rank tbody tr:hover td.lks{background:var(--panel)}
+/* 名次；我的监控里的插件高亮（固定的操作列也要跟着染色，不然盖住一块） */
+table.rank td.rk{color:var(--t3);font-variant-numeric:tabular-nums;font-size:11.5px;letter-spacing:-.3px}
+table.rank tr.watched td,table.rank tr.watched:hover td.lks{background:color-mix(in srgb,var(--accent-bg) 70%,var(--panel))}
+table.rank tr.watched td.rk{color:var(--accent);font-weight:700}
+table.rank tr.watched td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+table.rank tr.miss td.nm{color:var(--t2,var(--t3))}
+table.rank tr.wsep td{padding:10px 8px 4px;font-size:11.5px;font-weight:650;color:var(--accent);background:var(--panel);border-top:1px dashed var(--accent-line)}
+table.rank tr.more td{text-align:center;padding:10px 0;background:var(--panel)}
+table.rank tr.more .btn{font-size:12px;padding:5px 14px}
 /* 彩色 + 号：一键加入我的监控；已加入显示 ✓，再点取消 */
 .wadd{appearance:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;padding:0;margin-right:4px;
   border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:15px;font-weight:700;line-height:1;color:#fff;vertical-align:top;
@@ -491,6 +508,11 @@ td.down{color:var(--bad);font-weight:600}
       <h2>我的监控<span class="h2-acts"><button class="btn ghost sm" id="btnWatchRefresh" title="去 npm 实时查这些插件的最新数据">↻ 刷新</button><button class="ai hidden" id="aiWatch" title="把监控列表发到对话里，让 AI 看看谁在涨、谁停更了">+AI 看看近况</button></span></h2>
       <p class="cap"><span id="watchAsOf"></span>监控列表存在浏览器本地，不上传。点「刷新」去 npm 和 GitHub 查最新：版本号、发版时间、GitHub 数据是即时的；周下载 npm 大约一天更新一次；日常基线和环比按 npm 已经出数据的最近 30 天算（npm 只在一天结束后才汇总，最近还常晚几天）。</p>
       <div id="watchList"></div>
+    </div>
+    <div class="section" id="secWatchDetail">
+      <h2>监控详情 <span style="font-size:11.5px;color:var(--t3);font-weight:500" id="wdAsOf"></span></h2>
+      <p class="cap">每个插件一列，下载、版本、GitHub、市场位置都摆出来。「较上次」是和你上一次点刷新时比：每次刷新都会在本机存一份快照，盯自家产品和竞品的变化。</p>
+      <div class="tblwrap"><table class="cmp wd"><thead id="wdHead"></thead><tbody id="wdBody"></tbody></table></div>
     </div>
     <div class="section">
       <h2>对比图</h2>

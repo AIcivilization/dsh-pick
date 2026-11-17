@@ -99,7 +99,7 @@ function askCands() {
 }
 
 function askVerdict() {
-  const rows = picked.map(n => CAT.packages[n]).filter(Boolean)
+  const rows = picked.map(cmpRec).filter(Boolean)
   const rule = $('#verdicts').innerText.trim().replace(/\n+/g, ' / ')
   return [
     `帮我在这几个 DSH 插件里做个选择${dataAsOf()}。`,
@@ -409,6 +409,8 @@ function bindEvents() {
       const t = b.dataset.tab
       // 每个标签一块内容：tab-pick / tab-rank / tab-watch
       document.querySelectorAll('#tabs button').forEach(x => $('#tab-' + x.dataset.tab).classList.toggle('hidden', x.dataset.tab !== t))
+      // 打开「我的监控」时，数据超过 6 小时没刷新就自动刷新一次
+      if (t === 'watch' && watch().length && (!LIVE.at || Date.now() - Date.parse(LIVE.at) > 6 * 3600 * 1000) && !$('#btnWatchRefresh').disabled) refreshWatch()
     })
   })
 
@@ -426,6 +428,11 @@ function bindEvents() {
     })
   })
   $('#rankCat').addEventListener('change', renderRank)
+  $('#rankBody').addEventListener('click', e => {
+    if (!e.target.closest('[data-rank-more]')) return
+    RANK_LIMIT += RANK_STEP
+    renderRank()
+  })
 
   $('#aiCands').addEventListener('click', () => cands.length && askAI(askCands()))
   $('#aiVerdict').addEventListener('click', () => picked.length >= 2 && askAI(askVerdict()))
@@ -520,6 +527,7 @@ function togglePick(name) {
   renderPickBar()
   renderAi()
   renderCompare()
+  fillCompareLive()
 }
 
 /* ---------------- 比较清单：搜索结果之外的插件也能加进来 ---------------- */
@@ -625,6 +633,7 @@ const ROWS = [
   { k: 'cad',    label: '版本节奏',    get: r => r.deep && r.deep.cadence, fmt: r => r == null ? '—' : r + ' 天/版', best: 'min' },
   { k: 'age',    label: '最近更新',    get: r => r.deep && r.deep.age, fmt: r => r == null ? '—' : r + ' 天前', best: 'min' },
   { k: 's',      label: '健康度',      get: r => r.deep && r.deep.s, fmt: num, best: 'max' },
+  { k: 'tot',    label: '累计下载',    get: r => r.total, fmt: num, best: 'max' },
   { k: 'gs',     label: 'GitHub 星标', get: r => r.gh && r.gh.s, fmt: num, best: 'max' },
   { k: 'gp',     label: '最近提交',    get: r => r.gh && daysSince(r.gh.p), fmt: r => r == null ? '—' : ageText(r), best: 'min' },
 ]
@@ -638,11 +647,11 @@ function renderCompare() {
     return
   }
 
-  const rows = picked.map(n => CAT.packages[n]).filter(Boolean)
+  const rows = picked.map(cmpRec).filter(Boolean)
   const missingDeep = rows.filter(r => !r.deep).length
 
   $('#cmpHead').innerHTML = '<tr><th>指标</th>' +
-    rows.map((r, i) => `<th><i style="background:${colorOf(picked.indexOf(r.n))}"></i>${esc(r.n)}</th>`).join('') +
+    rows.map((r, i) => `<th><i style="background:${colorOf(picked.indexOf(r.n))}"></i>${esc(r.n)}${r.live ? ' <span class="srcchip" title="指标是刚从 npm 实时算的">实时</span>' : ''}</th>`).join('') +
     '</tr>'
 
   let body = ''
@@ -662,7 +671,9 @@ function renderCompare() {
 
   $('#cmpNote').innerHTML =
     `健康度 = 日常基线 40% + 增速 25% + 新鲜度 20% + 版本节奏 15%，满分 100。` +
-    (missingDeep ? `<br><span style="color:var(--warn-text)">其中 ${missingDeep} 个未进入深挖范围（周下载 Top 榜外），去噪指标缺失，无法参与健康度比较。</span>` : '')
+    (rows.some(r => r.live) ? `<br>${rows.filter(r => r.live).map(r => esc(r.n)).join('、')} 不在每日构建的去噪范围（周下载前 300 多名）里，这些指标是刚从 npm 实时算的。` : '') +
+    (CMP_PENDING.size ? `<br><span style="color:var(--t3)">正在从 npm 实时计算 ${[...CMP_PENDING].map(esc).join('、')} 的指标…</span>` : '') +
+    (missingDeep && !CMP_PENDING.size ? `<br><span style="color:var(--warn-text)">${rows.filter(r => !r.deep).map(r => esc(r.n)).join('、')} 实时也没算出去噪指标（npm 上数据太少或这次没查到），无法参与健康度比较。</span>` : '')
 
   sec.classList.remove('hidden')
   renderVerdict()
@@ -670,7 +681,7 @@ function renderCompare() {
 
 /* ---------------- 第 4 步：结论 ---------------- */
 function renderVerdict() {
-  const rows = picked.map(n => CAT.packages[n]).filter(Boolean)
+  const rows = picked.map(cmpRec).filter(Boolean)
   const withDeep = rows.filter(r => r.deep)
   const noDeep = rows.filter(r => !r.deep)
 
@@ -749,7 +760,63 @@ function rankBoard() {
   return document.querySelector('#rankBoard button.on').dataset.b
 }
 
-/** 官方 / 社区 / 商店榜：数据来自别人维护的目录，每个榜只存头部 */
+/* ---------- 排行榜统一出表 ---------- */
+// 每个榜都先排出完整名次，只画前 RANK_LIMIT 名，下面「显示更多」再加一页
+const RANK_STEP = 50
+let RANK_LIMIT = RANK_STEP
+let RANK_SIG = ''
+
+/** 换了榜单、角度或分类：回到第一页 */
+function rankSig(sig) {
+  if (sig !== RANK_SIG) { RANK_SIG = sig; RANK_LIMIT = RANK_STEP }
+}
+
+/** 名字：npm 包名，或 gh:owner/repo 的仓库名 */
+function watchName(k) {
+  return k.startsWith('gh:') ? k.slice(3).split('/').pop() : k
+}
+
+/** 不在这个榜的通用原因：目录里没有、分类对不上 */
+function missCommon(k, cat) {
+  const rec = CAT.packages[k]
+  if (!k.startsWith('gh:') && !rec) return '插件目录里没有它（还没被收录，或不是 DSH 插件）'
+  if (cat && rec && rec.cat !== cat) return `它的分类是「${rec.cat || '未分类'}」，不在「${cat}」里`
+  return ''
+}
+
+/**
+ * all：这个榜（当前角度、分类下）的完整排名；row(x, i, on) 画一行，i 是在完整排名里的下标。
+ * keysOf(x)：这一行对应的监控名（GitHub 榜一行代表一个仓库，可能对应好几个插件）。
+ * 我的监控里的插件：在画出来的前几名里就高亮；不在就追加到最下面，标出它在完整排名里的名次；
+ * 完整排名里也没有的，写明为什么不在这个榜
+ */
+function paintRank({ all, row, keysOf, cols, empty, miss }) {
+  const watched = watch()
+  const wset = new Set(watched)
+  const shown = all.slice(0, RANK_LIMIT)
+  const isOn = x => keysOf(x).some(k => wset.has(k))
+  let html = all.length ? shown.map((x, i) => row(x, i, isOn(x))).join('') : `<tr><td colspan="${cols}" class="empty">${empty}</td></tr>`
+  if (all.length > shown.length) {
+    html += `<tr class="more"><td colspan="${cols}"><button class="btn ghost" data-rank-more>显示更多 · 还有 ${num(all.length - shown.length)} 个（共 ${num(all.length)}）</button></td></tr>`
+  }
+  const shownKeys = new Set(shown.flatMap(keysOf))
+  const extra = watched.filter(k => !shownKeys.has(k))
+  if (extra.length) {
+    const seen = new Set()
+    const found = extra.map(k => ({ k, i: all.findIndex(x => keysOf(x).includes(k)) }))
+      .filter(({ i }) => i < 0 || (!seen.has(i) && seen.add(i)))
+      .sort((a, b) => (a.i < 0) - (b.i < 0) || a.i - b.i)
+    html += `<tr class="wsep"><td colspan="${cols}">我的监控 · 不在上面前 ${num(shown.length)} 名里的，排在这里</td></tr>`
+    html += found.map(({ k, i }) => (i >= 0 ? row(all[i], i, true)
+      : `<tr class="watched miss"><td class="rk">—</td><td class="nm" colspan="${cols - 2}">${esc(watchName(k))}` +
+        `<div class="sub">不在这个榜：${esc(miss(k) || '这个榜没收录它')}</div></td><td class="lks">${watchBtn(k)}</td></tr>`)).join('')
+  }
+  $('#rankBody').innerHTML = html
+}
+const trOpen = on => `<tr${on ? ' class="watched"' : ''}>`
+const rankCell = i => `<td class="rk">${i + 1}</td>`
+
+/** 官方 / 社区 / 商店榜：数据来自别人维护的目录 */
 function renderOuterBoard(board) {
   const data = CAT.boards && CAT.boards[board]
   const CAPS = {
@@ -769,15 +836,27 @@ function renderOuterBoard(board) {
     (!r.n ? '<div class="sub">只在 GitHub，没发到 npm</div>' : '') +
     (r.d ? `<div class="sub desc" title="${esc(r.d)}">${esc(r.d)}</div>` : '') + `</td>`
   const actions = r => `<td class="lks">${watchBtn(watchKey(r))}${linkBtns({ n: r.n || '', ghUrl: r.repo || '' }, { icon: true })}</td>`
+  const marketName = { official: 'DeepSeek 官方', community: '社区目录', shop: '这个商店' }[board]
+  const keysOf = r => [watchKey(r)].filter(Boolean)
+  // 社区目录、商店的榜只存了头部（比如社区一万多个只存前两百多）：没存下来不等于没收录，
+  // 综合榜那边记着每个插件被哪些市场收录了（rec.src），用它分辨
+  const srcKey = { official: 'official', community: 'dshmarket', shop: 'shop' }[board]
+  const miss = k => {
+    const rec = CAT.packages[k]
+    if (rec && (rec.src || []).includes(srcKey)) return `${marketName}收录了它，但这个榜只存了前 ${num(data.rows.length)} 个（共 ${num(data.total || data.rows.length)}），它排在后面，具体名次没存`
+    return `${marketName}没收录它`
+  }
 
   if (board === 'official') {
+    rankSig(board)
     const rows = data.rows.slice().sort((x, y) => (y.w || 0) - (x.w || 0))
     $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th class="r">周下载</th><th></th></tr>'
-    $('#rankBody').innerHTML = rows.map((r, i) => `<tr><td style="color:var(--t3)">${i + 1}</td>${nameCell(r)}<td class="r"><b>${num(r.w)}</b></td>${actions(r)}</tr>`).join('')
+    paintRank({ all: rows, keysOf, cols: 4, empty: '', miss, row: (r, i, on) => `${trOpen(on)}${rankCell(i)}${nameCell(r)}<td class="r"><b>${num(r.w)}</b></td>${actions(r)}</tr>` })
     return
   }
 
   const metric = document.querySelector(`#rankFilters .chip.on[data-board="${board}"]`).dataset.m
+  rankSig(board + '|' + metric)
   let rows = data.rows.filter(r => r[metric] != null)
     .sort((x, y) => (y[metric] > x[metric] ? 1 : y[metric] < x[metric] ? -1 : 0))
   // 按星标排时一个仓库只留一行（优先留发到 npm 的那条），不然同仓库的条目数字一样、刷屏
@@ -790,15 +869,20 @@ function renderOuterBoard(board) {
     const keep = new Set(best.values())
     rows = rows.filter(r => keep.has(r))
   }
-  rows = rows.slice(0, 40)
   const hasDl = board === 'community'
   $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th class="r">★ 星标</th>' +
     (hasDl ? '<th class="r" title="近 30 天">下载</th>' : '') + '<th class="r">收录</th><th></th></tr>'
   const strong = (on, t) => (on ? `<b>${t}</b>` : t)
-  $('#rankBody').innerHTML = rows.map((r, i) => `<tr><td style="color:var(--t3)">${i + 1}</td>${nameCell(r)}` +
-    `<td class="r">${strong(metric === 's', num(r.s))}</td>` +
-    (hasDl ? `<td class="r">${strong(metric === 'dl', num(r.dl))}</td>` : '') +
-    `<td class="r">${strong(metric === 'added', r.added ? esc(r.added.slice(5)) : '—')}</td>${actions(r)}</tr>`).join('')
+  const metricName = { s: '星标', dl: '下载量', added: '收录日期' }[metric]
+  const inBoard = new Set(data.rows.flatMap(keysOf))
+  paintRank({
+    all: rows, keysOf, cols: hasDl ? 6 : 5, empty: '这个榜还没有数据。',
+    miss: k => (inBoard.has(k) ? `${marketName}收录了它，但它${metric === 's' ? '和同仓库的另一个条目只列一行，或' : ''}没有${metricName}数据` : miss(k)),
+    row: (r, i, on) => `${trOpen(on)}${rankCell(i)}${nameCell(r)}` +
+      `<td class="r">${strong(metric === 's', num(r.s))}</td>` +
+      (hasDl ? `<td class="r">${strong(metric === 'dl', num(r.dl))}</td>` : '') +
+      `<td class="r">${strong(metric === 'added', r.added ? esc(r.added.slice(5)) : '—')}</td>${actions(r)}</tr>`,
+  })
 }
 
 /** 「收录于」的市场名 */
@@ -826,6 +910,44 @@ const ANGLE_INFO = {
   new: { label: '收录', cap: () => '新上架：最近 30 天才被插件市场收录的，越新越靠前，同一天的按使用量排。' },
 }
 
+const OV_ANGLES = ['rec', 'use', 'rep', 'stable', 'rise', 'new']
+// 在综合榜里、但这个角度不参与的原因（规则见 lib/overall.js）
+const OV_MISS = {
+  use: '没有去噪后的日常基线（下载太少，没进深挖），不参与「使用」',
+  rep: '没有 GitHub 星标，也没被精选或官方收录，不参与「口碑」',
+  stable: '上架不满 60 天，或很久没维护，不参与「稳定」',
+  rise: '日常基线不到每天 20 次，不参与「增速」',
+  new: '被收录超过 30 天，不算新上架',
+}
+let hasOA = false
+
+/**
+ * 综合榜参与排名的全部插件：每日目录只把每个角度的头部存成完整的行，
+ * 其余 npm 插件的六个角度分数存在各自的记录上（rec.oa），这里补成行，分类筛选、算名次都在全部插件里排。
+ * 旧目录没有 rec.oa，就只有存下来的那些
+ */
+function overallPool(data) {
+  const angles = data.angles || OV_ANGLES
+  const seen = new Set(data.rows.map(r => r.k))
+  const pool = data.rows.slice()
+  hasOA = false
+  for (const rec of Object.values(CAT.packages)) {
+    if (!rec.oa) continue
+    hasOA = true
+    if (seen.has(rec.n)) continue
+    const d = rec.deep
+    const a = Object.fromEntries(angles.map((k, i) => [k, rec.oa[i] ?? null]))
+    const row = { k: rec.n, n: rec.n, sc: a.rec, a, src: rec.src || [] }
+    if (rec.ad) row.added = rec.ad
+    if (rec.gh && rec.gh.s != null) row.s = rec.gh.s
+    if (d && Number.isFinite(d.growth)) row.g = Math.round(d.growth * 100) / 100
+    const last = (d && d.lastRelease) || (rec.t ? String(rec.t).slice(0, 10) : '')
+    if (last) row.last = last
+    pool.push(row)
+  }
+  return pool
+}
+
 /**
  * 综合榜：几个插件市场合成一个榜（每日构建时算好，见 lib/overall.js），一个插件一行。
  * 顶部选角度；npm 上的插件能直接装，只在 GitHub 上的先只展示
@@ -847,22 +969,32 @@ function renderOverall() {
     return
   }
   const cat = $('#rankCat').value
+  rankSig(`overall|${angle}|${cat}`)
   const valueOf = r => (hasAngles ? r.a[angle] : r.sc)
-  let rows = data.rows
+  const pool = overallPool(data)
+  const rows = pool
     .filter(r => valueOf(r) != null)
     .map(r => ({ r, rec: r.n ? CAT.packages[r.n] : null }))
     .filter(({ rec }) => !cat || (rec && rec.cat === cat))
   rows.sort((x, y) => angle === 'new'
     ? String(y.r.added || '').localeCompare(String(x.r.added || '')) || valueOf(y.r) - valueOf(x.r)
-    : valueOf(y.r) - valueOf(x.r))
-  rows = rows.slice(0, 60)
+    : valueOf(y.r) - valueOf(x.r) || (y.rec ? y.rec.w || 0 : 0) - (x.rec ? x.rec.w || 0 : 0))
+  const inPool = new Map(pool.map(r => [r.k, r]))
   // 固定列宽（table.ov）：数字列和操作列宽度固定，插件名占剩下的；不然简介把名字一列撑得很宽，
   // 右边固定的操作列正好盖住数字
-  $('#rankHead').innerHTML = '<tr><th style="width:26px">#</th><th>插件</th>' +
+  $('#rankHead').innerHTML = '<tr><th style="width:34px">#</th><th>插件</th>' +
     `<th class="r" style="width:38px" title="这个角度的分数 0~100">${info.label}</th><th class="r" style="width:44px">周下载</th>` +
     '<th class="r" style="width:38px" title="GitHub 星标">★</th><th class="r" style="width:46px" title="最近一次发版或提交">最近</th>' +
     '<th style="width:112px"></th></tr>'
-  $('#rankBody').innerHTML = rows.length ? rows.map(({ r, rec }, i) => {
+  const miss = k => {
+    const common = missCommon(k, cat)
+    if (common) return common
+    const r = inPool.get(k)
+    if (r) return OV_MISS[angle] || '这个角度不参与'
+    if (k.startsWith('gh:')) return '只在 GitHub 上、排名靠后的插件综合榜没有存'
+    return CAT.packages[k].oa ? '' : hasOA ? '没进综合榜：仓库已归档、没声明 dsh.bundle，或是终端版插件' : '不在综合榜存下来的前列里（每日目录更新后能看到完整名次）'
+  }
+  paintRank({ all: rows, cols: 7, keysOf: ({ r }) => [r.k], miss, empty: '这个角度下没有插件（或这个分类里没有）。', row: ({ r, rec }, i, on) => {
     const name = r.n || r.name
     const v = rec ? rec.v : r.v
     const w = rec ? rec.w : r.w
@@ -878,7 +1010,7 @@ function renderOverall() {
     // 能装的：目录里的 npm 包按装前检查给按钮；官方插件不在目录里，名字核对过，也能装
     const inst = r.n ? installArea(rec || { n: r.n }, { icon: true }) : ''
     const links = linkBtns(rec || { n: r.n || '', ghUrl: r.repo || '' }, { icon: true })
-    return `<tr><td style="color:var(--t3)">${i + 1}</td>` +
+    return `${trOpen(on)}${rankCell(i)}` +
       `<td class="nm"><div class="nmline" title="${esc(name)}${v ? ' v' + esc(v) : ''}">${esc(name)}${v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(v)}</span>` : ''}</div>` +
         `<div class="chips">${srcChips(r.src, { short: true })}${r.n ? '' : '<span class="srcchip gh" title="只在 GitHub，没发到 npm">GitHub</span>'}</div>` +
         (desc ? `<div class="sub desc" title="${esc(desc)}">${esc(desc)}</div>` : '') + `</td>` +
@@ -887,7 +1019,7 @@ function renderOverall() {
       `<td class="r">${r.s != null ? short(r.s) : '—'}</td>` +
       `<td class="r" title="${esc(r.last || '')}"><span${age != null && age > 90 ? ' class="stale"' : ''}>${age != null ? ageText(age) : '—'}</span></td>` +
       `<td class="lks">${watchBtn(r.k)}${inst}${links}</td></tr>`
-  }).join('') : '<tr><td colspan="7" class="empty">这个角度下没有插件（或这个分类里没有）。</td></tr>'
+  } })
 }
 
 function renderRank() {
@@ -913,6 +1045,7 @@ function renderRank() {
     return
   }
 
+  rankSig(`${board}|${metric}|${cat}`)
   if (board === 'gh') {
     $('#rankCap').textContent = '按 GitHub 仓库数据：星标看关注度，最近提交看还有没有人在维护。一个仓库只列一行；仓库填成 DSH 本体的不算。'
     const val = r => metric === 'gs' ? r.gh.s
@@ -930,14 +1063,25 @@ function renderRank() {
       else { cur.n++; if (r.w > cur.r.w) cur.r = r }
     }
     const shared = new Map([...byRepo.values()].map(x => [x.r.n, x.n]))
-    const rows = [...byRepo.values()].map(x => x.r).sort((x, y) => val(y) - val(x)).slice(0, 40)
+    // 一行代表一个仓库：这个仓库里的插件都算这一行（监控了其中任何一个，都高亮这一行）
+    const repoKeys = new Map()
+    for (const r of Object.values(CAT.packages)) {
+      if (!r.gh) continue
+      const k = r.gh.repo.toLowerCase()
+      if (!repoKeys.has(k)) repoKeys.set(k, [])
+      repoKeys.get(k).push(r.n)
+    }
+    const rows = [...byRepo.values()].map(x => x.r).sort((x, y) => val(y) - val(x))
     $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th>分类</th>' +
       '<th class="r">★ 星标</th><th class="r">Fork</th><th class="r" title="未关闭的 issue 与 PR">讨论</th>' +
       '<th class="r" title="仓库最近一次提交">最近提交</th><th></th></tr>'
-    $('#rankBody').innerHTML = rows.length ? rows.map((r, i) => {
+    paintRank({
+      all: rows, cols: 8, empty: '目录里还没有 GitHub 数据（每日更新取到后就有）。',
+      keysOf: r => repoKeys.get(r.gh.repo.toLowerCase()) || [r.n],
+      miss: k => missCommon(k, cat) || '目录里没有它的 GitHub 仓库数据（没填仓库地址，或仓库填成了 DSH 本体）',
+      row: (r, i, on) => {
       const age = daysSince(r.gh.p)
-      return `<tr>` +
-        `<td style="color:var(--t3)">${i + 1}</td>` +
+      return trOpen(on) + rankCell(i) +
         `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` +
           (shared.get(r.n) > 1 ? `<div class="sub" title="仓库 ${esc(r.gh.repo)} 里有 ${shared.get(r.n)} 个插件，数据相同，只列一行">等 ${shared.get(r.n)} 个插件共用这个仓库</div>` : '') +
         `</td>` +
@@ -948,7 +1092,7 @@ function renderRank() {
         `<td class="r" title="${esc(r.gh.p || '')}">${r.gh.a ? '<span class="arch">已归档</span>' : `<span${age != null && age > 90 ? ' class="stale"' : ''}>${b(metric === 'gp', ageText(age))}</span>`}</td>` +
         `<td class="lks">${watchBtn(r.n)}${linkBtns(r, { icon: true })}</td>` +
         `</tr>`
-    }).join('') : '<tr><td colspan="8" class="empty">目录里还没有 GitHub 数据（每日更新取到后就有）。</td></tr>'
+    } })
     return
   }
 
@@ -958,15 +1102,17 @@ function renderRank() {
     : metric === 'growth' ? (r.deep.growth === null ? -Infinity : r.deep.growth)
     : metric === 's' ? r.deep.s
     : r.w
-  const rows = Object.values(CAT.packages).filter(r => inCat(r) && (!onlyDeep || r.deep)).sort((x, y) => val(y) - val(x)).slice(0, 40)
+  const rows = Object.values(CAT.packages).filter(r => inCat(r) && (!onlyDeep || r.deep)).sort((x, y) => val(y) - val(x))
   $('#rankHead').innerHTML = '<tr><th style="width:44px">#</th><th>插件</th><th>分类</th>' +
     `<th class="r">基线</th><th class="r">周下载</th><th class="r">环比</th>${metric === 's' ? '<th class="r">健康度</th>' : ''}` +
     '<th class="r" title="最近一次发版 · 平均几天发一个版本">更新</th><th></th></tr>'
-  $('#rankBody').innerHTML = rows.map((r, i) => {
+  paintRank({
+    all: rows, cols: metric === 's' ? 9 : 8, empty: '这个分类里没有插件。', keysOf: r => [r.n],
+    miss: k => missCommon(k, cat) || (k.startsWith('gh:') ? '只在 GitHub 上，没发到 npm' : '没有去噪数据（下载太少，没进深挖），这一项排不了；切到「周下载」能看到它的名次'),
+    row: (r, i, on) => {
     const d = r.deep
     const g = d ? d.growth : null
-    return `<tr>` +
-      `<td style="color:var(--t3)">${i + 1}</td>` + nameCell(r) +
+    return trOpen(on) + rankCell(i) + nameCell(r) +
       `<td><span class="catpill">${esc(r.cat)}</span></td>` +
       `<td class="r">${b(metric === 'base', d ? num(d.base) : '—')}</td>` +
       `<td class="r">${b(metric === 'w', num(r.w))}</td>` +
@@ -975,7 +1121,7 @@ function renderRank() {
       maintCell(d) +
       `<td class="lks">${watchBtn(r.n)}${linkBtns(r, { icon: true })}</td>` +
       `</tr>`
-  }).join('')
+  } })
 }
 
 /* ---------------- 我的监控 ---------------- */
@@ -1014,6 +1160,9 @@ function toggleWatch(key) {
     b.textContent = now ? '✓' : '+'
     b.title = now ? '已在我的监控里，点一下移除' : '加入我的监控'
     b.setAttribute('aria-label', now ? '移出我的监控' : '加入我的监控')
+    // 排行榜里这一行跟着高亮（不重画整张表，免得滚动位置跳走）
+    const tr = b.closest('table.rank tr')
+    if (tr) tr.classList.toggle('watched', now)
   })
 }
 
@@ -1046,22 +1195,160 @@ function watchRec(n) {
     const gh = live && live.found ? live.gh : (inBoard && inBoard.s != null ? { repo, s: inBoard.s, f: null, i: null, p: null, a: false } : null)
     return { n: '', label: repo, cat: '只在 GitHub', w: null, m: null, deep: null, ghUrl: url, gh, live: Boolean(live && live.found) }
   }
-  const base = CAT.packages[n]
-  const live = LIVE.rows[n]
+  return mergeLive(CAT.packages[n], LIVE.rows[n], n)
+}
+
+/**
+ * 目录记录 + 实时查到的数据（/live 的一行）→ 一条记录，字段用目录的短名，后面的代码不用分两套。
+ * 实时的覆盖目录的；npm 下载接口偶尔限流查不到时，保留目录里的指标，别把有的数据冲掉
+ */
+function mergeLive(base, live, n) {
   if (!live || !live.found) return base || null
   const d = live.deep
   return {
     ...(base || { n, cat: '（目录外）' }),
     n,
     v: live.latest || (base && base.v),
+    d: (base && base.d) || live.description || '',
     w: live.weekly,
     m: live.monthly,
-    // npm 下载接口偶尔限流查不到：保留目录里的指标，别把有的数据冲掉
     deep: d ? { base: d.baseline, growth: d.growth, cadence: d.cadence, age: d.ageDays, lastRelease: d.lastRelease, versions: d.versions, s: d.score } : (base && base.deep) || null,
     gh: live.gh || (base && base.gh) || null,
+    total: live.total ?? null,
+    daily: live.daily || null,
+    dailyStart: live.dailyStart || null,
     live: true,
     catalogW: base ? base.w : null,
   }
+}
+
+/* ---------------- 比较里的插件：没有去噪数据的，实时算一份 ---------------- */
+// 去噪指标每日构建时只给周下载前 300 多名算；自己加进比较的插件多半在这之外，就去 npm 当场算
+const CMP_LIVE = new Map() // 包名 → /live 的一行
+const CMP_PENDING = new Set()
+function cmpRec(n) {
+  return CMP_LIVE.has(n) ? mergeLive(CAT.packages[n], CMP_LIVE.get(n), n) : CAT.packages[n]
+}
+async function fillCompareLive() {
+  const need = picked.filter(n => CAT.packages[n] && !CAT.packages[n].deep && !CMP_LIVE.has(n) && !CMP_PENDING.has(n))
+  if (!need.length) return
+  need.forEach(n => CMP_PENDING.add(n))
+  renderCompare()
+  try {
+    const r = await fetch(`${P.live}?names=${encodeURIComponent(need.join(','))}`, { cache: 'no-store' })
+    const j = await r.json()
+    if (r.ok) for (const row of j.rows || []) if (row.found) CMP_LIVE.set(row.name, row)
+  } catch { /* 查不到就按目录里的显示 */ }
+  need.forEach(n => CMP_PENDING.delete(n))
+  renderCompare()
+}
+
+/* ---------------- 监控详情：快照历史、走势图、各项数据 ---------------- */
+// 每次刷新在本机存一份快照（每个插件最多 30 份），「较上次」就是和上一份比
+const HIST_KEY = 'dsh-pick-watch-history-v1'
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY)) || {} } catch { return {} }
+}
+function saveSnapshots(at) {
+  const hist = loadHistory()
+  for (const n of watch()) {
+    const r = watchRec(n)
+    if (!r || !r.live) continue
+    const snap = { t: at, w: r.w ?? null, base: r.deep ? r.deep.base : null, s: r.gh ? r.gh.s : null, rank: r.rank ?? null, sc: r.sc ?? null }
+    const list = (hist[n] || []).filter(x => x.t !== at)
+    list.push(snap)
+    hist[n] = list.slice(-30)
+  }
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(hist)) } catch { /* 存不下就不记 */ }
+}
+/** 和上一份快照比：返回「较上次」的小字 */
+function changeOf(n, key, now, { lowerIsBetter = false, asPct = true } = {}) {
+  const list = loadHistory()[n] || []
+  const prev = list.length >= 2 ? list[list.length - 2] : null
+  if (!prev || prev[key] == null || now == null) return ''
+  const diff = now - prev[key]
+  const when = new Date(prev.t).toLocaleDateString()
+  if (diff === 0) return `<span class="ch flat" title="和 ${esc(when)} 刷新时一样">较上次持平</span>`
+  const good = lowerIsBetter ? diff < 0 : diff > 0
+  // 排名数字越小越好：用「升 / 降 几名」说，正负号容易看反
+  const txt = lowerIsBetter ? `${diff < 0 ? '升' : '降'} ${num(Math.abs(diff))} 名`
+    : asPct && prev[key] ? `${diff > 0 ? '+' : ''}${Math.round(diff / prev[key] * 100)}%` : `${diff > 0 ? '+' : ''}${num(diff)}`
+  return `<span class="ch ${good ? 'up' : 'down'}" title="和 ${esc(when)} 刷新时相比">较上次 ${txt}</span>`
+}
+/** 30 天每日下载的走势小图（缺数据的日子断开） */
+function sparkSvg(daily, color) {
+  if (!daily || !daily.some(v => v != null)) return ''
+  const W = 120, H = 30
+  const max = Math.max(1, ...daily.filter(v => v != null))
+  const x = i => (i / (daily.length - 1)) * (W - 2) + 1
+  const y = v => H - 2 - (v / max) * (H - 4)
+  const segs = []
+  let cur = []
+  daily.forEach((v, i) => {
+    if (v == null) { if (cur.length) segs.push(cur); cur = []; return }
+    cur.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`)
+  })
+  if (cur.length) segs.push(cur)
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="30 天每日下载走势，最高 ${num(max)}">` +
+    segs.map(p => (p.length === 1 ? `<circle cx="${p[0].split(',')[0]}" cy="${p[0].split(',')[1]}" r="1.5" fill="${color}"/>` : `<polyline points="${p.join(' ')}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round"/>`)).join('') +
+    '</svg>'
+}
+/** 在综合榜某个角度里排第几（只在存下来的头部里找） */
+function angleRank(key, angle) {
+  const o = CAT.boards && CAT.boards.overall
+  if (!o || !o.rows.length || !o.rows[0].a) return null
+  const rows = o.rows.filter(r => r.a[angle] != null)
+    .sort((x, y) => angle === 'new' ? String(y.added || '').localeCompare(String(x.added || '')) || y.a.new - x.a.new : y.a[angle] - x.a[angle])
+  const i = rows.findIndex(r => r.k === key)
+  return i < 0 ? null : i + 1
+}
+
+function renderWatchDetail(list) {
+  const sec = $('#secWatchDetail')
+  if (!list.length) { sec.classList.add('hidden'); return }
+  sec.classList.remove('hidden')
+  $('#wdAsOf').textContent = LIVE.at ? `· ${new Date(LIVE.at).toLocaleString()} 刷新` : '· 还没刷新过，先显示目录数据'
+  const recs = list.map(n => ({ n, r: watchRec(n) }))
+  $('#wdHead').innerHTML = '<tr><th>指标</th>' + recs.map(({ n, r }, i) =>
+    `<th><i style="background:${colorOf(i)}"></i>${esc((r && r.label) || n)}</th>`).join('') + '</tr>'
+  const ANG = { rec: '综合', use: '使用', rep: '口碑', stable: '稳定', rise: '增速' }
+  const cell = (r, fn) => (r ? fn(r) : '—')
+  const rows = [
+    ['下载'],
+    ['30 天每日下载', ({ r }, i) => cell(r, x => (x.daily ? sparkSvg(x.daily, colorOf(i)) : '<span style="color:var(--t3)">刷新后显示</span>'))],
+    ['周下载', ({ n, r }) => cell(r, x => (x.w != null ? `<b>${num(x.w)}</b>${changeOf(n, 'w', x.w)}` : '—'))],
+    ['上周（前 7 天）', ({ r }) => cell(r, x => {
+      const v = (x.daily || []).filter(d => d != null)
+      return v.length >= 14 ? num(v.slice(-14, -7).reduce((a, b) => a + b, 0)) : '—'
+    })],
+    ['日常基线（去噪）', ({ n, r }) => cell(r, x => (x.deep ? `${num(x.deep.base)}/天${changeOf(n, 'base', x.deep.base)}` : '—'))],
+    ['近 7 日环比', ({ r }) => cell(r, x => (x.deep && x.deep.growth != null ? `<span class="${x.deep.growth >= 0 ? 'up' : 'down'}">${pct(x.deep.growth)}</span>` : '—'))],
+    ['月下载', ({ r }) => cell(r, x => (x.m != null ? num(x.m) : '—'))],
+    ['累计下载', ({ r }) => cell(r, x => (x.total != null ? num(x.total) : '—'))],
+    ['版本'],
+    ['当前版本', ({ r }) => cell(r, x => (x.v ? `v${esc(x.v)}` : '—'))],
+    ['最近发版', ({ r }) => cell(r, x => (x.deep && x.deep.lastRelease ? `${esc(x.deep.lastRelease)}<span class="ch flat">${ageText(x.deep.age)}</span>` : '—'))],
+    ['版本总数', ({ r }) => cell(r, x => (x.deep && x.deep.versions != null ? num(x.deep.versions) : '—'))],
+    ['发版节奏', ({ r }) => cell(r, x => (x.deep && x.deep.cadence != null ? `${x.deep.cadence} 天/版` : '—'))],
+    ['健康度', ({ r }) => cell(r, x => (x.deep && x.deep.s != null ? x.deep.s : '—'))],
+    ['GitHub'],
+    ['星标', ({ n, r }) => cell(r, x => (x.gh ? `${num(x.gh.s)}${changeOf(n, 's', x.gh.s, { asPct: false })}` : '—'))],
+    ['Fork', ({ r }) => cell(r, x => (x.gh && x.gh.f != null ? num(x.gh.f) : '—'))],
+    ['未关闭 issue / PR', ({ r }) => cell(r, x => (x.gh && x.gh.i != null ? num(x.gh.i) : '—'))],
+    ['最近提交', ({ r }) => cell(r, x => (x.gh && x.gh.p ? `${esc(x.gh.p)}${x.gh.a ? '<span class="ch down">已归档</span>' : ''}` : '—'))],
+    ['市场位置'],
+    ['npm 总榜', ({ n, r }) => cell(r, x => (x.rank ? `#${num(x.rank)}${changeOf(n, 'rank', x.rank, { lowerIsBetter: true, asPct: false })}` : '—'))],
+    ['分类排名', ({ r }) => cell(r, x => (x.crank ? `${esc(x.cat)} #${num(x.crank)}` : '—'))],
+    ['综合榜排名', ({ n, r }) => cell(r, () => {
+      const parts = Object.entries(ANG).map(([a, label]) => [label, angleRank(n, a)]).filter(([, v]) => v)
+      return parts.length ? parts.map(([l, v]) => `${l} #${v}`).join('<br>') : '<span style="color:var(--t3)">不在各角度前 120 名</span>'
+    })],
+    ['综合推荐分', ({ n, r }) => cell(r, x => (x.sc != null ? `${x.sc}${changeOf(n, 'sc', x.sc, { asPct: false })}` : '—'))],
+    ['收录于', ({ r }) => cell(r, x => (x.src && x.src.length ? srcChips(x.src, { short: true }) : '—'))],
+  ]
+  $('#wdBody').innerHTML = rows.map(([label, fn]) => (fn
+    ? `<tr><td>${label}</td>${recs.map((x, i) => `<td>${fn(x, i)}</td>`).join('')}</tr>`
+    : `<tr class="grp"><td colspan="${recs.length + 1}">${label}</td></tr>`)).join('')
 }
 
 async function refreshWatch() {
@@ -1076,6 +1363,7 @@ async function refreshWatch() {
     if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status)
     LIVE = { at: j.at, anchor: j.anchor, rows: Object.fromEntries(j.rows.map(x => [x.name, x])) }
     try { localStorage.setItem(LIVE_KEY, JSON.stringify(LIVE)) } catch { /* 存不下就只这次有效 */ }
+    saveSnapshots(j.at)
     const miss = j.rows.filter(x => !x.found).map(x => x.name)
     toast([
       miss.length ? `已刷新；npm 上查不到：${miss.join('、')}` : `已刷新 ${j.rows.length} 个插件`,
@@ -1140,6 +1428,8 @@ function renderWatch() {
   host.querySelectorAll('[data-rm]').forEach(b =>
     b.addEventListener('click', () => saveWatch(watch().filter(x => x !== b.dataset.rm)) || renderWatch()))
 
+  renderWatchDetail(list)
+
   // 对数刻度横条图
   const rows = list.map(watchRec).filter(r => r && r.w != null)
   const max = Math.max(...rows.map(r => r.w), 1)
@@ -1154,7 +1444,7 @@ function renderWatch() {
 
 /* ---------------- 导出结论（网页版） ---------------- */
 function exportHtml() {
-  const rows = picked.map(n => CAT.packages[n]).filter(Boolean)
+  const rows = picked.map(cmpRec).filter(Boolean)
   if (!rows.length) return
   const need = $('#need').value.trim()
   const verdicts = $('#verdicts').innerHTML
