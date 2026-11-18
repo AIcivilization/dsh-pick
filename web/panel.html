@@ -124,6 +124,8 @@ table.rank td.nm .desc{min-width:150px;display:-webkit-box;-webkit-line-clamp:2;
 .addwrap{position:relative;flex:1;min-width:160px}
 .addwrap input{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;font-family:inherit;background:var(--input);color:var(--text)}
 .addwrap input:focus{outline:none;border-color:var(--accent)}
+.watchadd{display:flex;gap:8px;align-items:center;margin:2px 0 12px}
+.watchadd .btn.sm{height:30px}
 .sug{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:50;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 6px 18px var(--shadow);max-height:300px;overflow:auto}
 .sug .opt{padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--soft)}
 .sug .opt:last-child{border-bottom:none}
@@ -240,6 +242,20 @@ table.cmp.wd .ch{display:block;font-size:10.5px;font-weight:600}
 table.cmp.wd .ch.up{color:var(--ok)}table.cmp.wd .ch.down{color:var(--bad)}table.cmp.wd .ch.flat{color:var(--t3);font-weight:400}
 table.cmp.wd .grp td{background:var(--soft);color:var(--t3);font-size:10.5px;font-weight:700;padding:4px 9px;text-align:left}
 table.cmp.wd svg.spark{display:block;margin-left:auto}
+/* 监控详情的窄屏版：按指标分块，每块一行一个插件，只往下长，不横向滚 */
+.wds .grp{margin:14px 0 4px;padding:4px 8px;border-radius:6px;background:var(--soft);color:var(--t3);font-size:10.5px;font-weight:700}
+.wds .grp:first-child{margin-top:0}
+.wds .m{padding:7px 2px 6px;border-bottom:1px solid var(--soft)}
+.wds .m:last-child{border-bottom:none}
+.wds .ml{color:var(--t3);font-size:11px;font-weight:600;margin-bottom:3px}
+.wds .r{display:flex;align-items:center;gap:8px;min-height:22px;font-size:12px}
+.wds .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t2)}
+.wds .nm i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:0}
+.wds .v{flex:none;max-width:62%;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.wds .ch{font-size:10.5px;font-weight:600}
+.wds .ch.up{color:var(--ok)}.wds .ch.down{color:var(--bad)}.wds .ch.flat{color:var(--t3);font-weight:400}
+.wds svg.spark{display:block}
+.wds .v .up{color:var(--ok)}.wds .v .down{color:var(--bad)}
 td.best{color:var(--ok);font-weight:700}
 td.best::after{content:' ★';font-size:9px}
 .miss{color:var(--mute)}
@@ -505,14 +521,22 @@ td.down{color:var(--bad);font-weight:600}
   <!-- ============ Tab 3：监控 ============ -->
   <div id="tab-watch" class="hidden">
     <div class="section">
-      <h2>我的监控<span class="h2-acts"><button class="btn ghost sm" id="btnWatchRefresh" title="去 npm 实时查这些插件的最新数据">↻ 刷新</button><button class="ai hidden" id="aiWatch" title="把监控列表发到对话里，让 AI 看看谁在涨、谁停更了">+AI 看看近况</button></span></h2>
+      <h2>我的监控<span class="h2-acts"><button class="btn sm" id="btnWatchAdd" title="输入插件名或 GitHub 地址，加到我的监控" aria-expanded="false">＋ 添加</button><button class="btn ghost sm" id="btnWatchRefresh" title="去 npm 实时查这些插件的最新数据">↻ 刷新</button><button class="ai hidden" id="aiWatch" title="把监控列表发到对话里，让 AI 看看谁在涨、谁停更了">+AI 看看近况</button></span></h2>
       <p class="cap"><span id="watchAsOf"></span>监控列表存在浏览器本地，不上传。点「刷新」去 npm 和 GitHub 查最新：版本号、发版时间、GitHub 数据是即时的；周下载 npm 大约一天更新一次；日常基线和环比按 npm 已经出数据的最近 30 天算（npm 只在一天结束后才汇总，最近还常晚几天）。</p>
+      <div class="watchadd hidden" id="watchAdd">
+        <span class="addwrap">
+          <input id="addWatch" placeholder="输入插件名、npm 包名或 GitHub 地址" autocomplete="off" aria-label="输入插件名，加入我的监控">
+          <div id="watchSug" class="sug hidden" role="listbox"></div>
+        </span>
+        <button class="btn sm" id="watchAddGo">添加</button>
+      </div>
       <div id="watchList"></div>
     </div>
     <div class="section" id="secWatchDetail">
       <h2>监控详情 <span style="font-size:11.5px;color:var(--t3);font-weight:500" id="wdAsOf"></span></h2>
       <p class="cap">每个插件一列，下载、版本、GitHub、市场位置都摆出来。「较上次」是和你上一次点刷新时比：每次刷新都会在本机存一份快照，盯自家产品和竞品的变化。</p>
-      <div class="tblwrap"><table class="cmp wd"><thead id="wdHead"></thead><tbody id="wdBody"></tbody></table></div>
+      <div class="tblwrap" id="wdTable"><table class="cmp wd"><thead id="wdHead"></thead><tbody id="wdBody"></tbody></table></div>
+      <div id="wdStack" class="wds hidden"></div>
     </div>
     <div class="section">
       <h2>对比图</h2>

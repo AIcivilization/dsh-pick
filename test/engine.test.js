@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { expandWords } from '../lib/words.js'
-import { installFacts, newerCatalog, loadCatalog, reloadCatalog, cachePath, searchByNeed, rank, addCommunity, communityRecord, slimRecord, normalize, weeklyDue, WEEKLY_ROTATION } from '../lib/engine.js'
+import { installFacts, newerCatalog, loadCatalog, reloadCatalog, cachePath, searchByNeed, rank, addCommunity, communityRecord, slimRecord, normalize, weeklyDue, WEEKLY_ROTATION, rotationDue } from '../lib/engine.js'
 import { communityPackages } from '../lib/boards.js'
 import { makeCatalog, tempHome, fakeFetch } from './fixtures.js'
 
@@ -213,7 +213,7 @@ test('addCommunity：被限流读不到的沿用上次目录里的，404 才算�
   const records = new Map()
   const rows = ['dsh-ok', 'dsh-throttled', 'dsh-throttled-new', 'dsh-gone'].map(n => ({ n, m: 1, repo: null }))
   const previous = { 'dsh-throttled': { n: 'dsh-throttled', v: '0.9.0', w: 42, m: 50, inst: { b: true } }, 'dsh-gone': { n: 'dsh-gone', w: 1 } }
-  await addCommunity(records, rows, { previous, wait: 1 })
+  await addCommunity(records, rows, { previous, wait: 1, manifestRotation: 1 }) // 每个都轮到重读
   assert.deepEqual([...records.keys()].sort(), ['dsh-ok', 'dsh-throttled'])
   assert.equal(records.get('dsh-throttled').v, '0.9.0', '沿用上次的记录')
   // 被限流的分三轮重试过
@@ -276,4 +276,32 @@ test('每日目录的包上没有六个角度的分数（rec.oa）时，综合�
   assert.equal(cat.packages[withOA.n].v, '9.9.9', '别的字段还是每日目录的')
   assert.notDeepEqual(cat.boards.overall.rows, rows)
   reloadCatalog(null)
+})
+
+test('addCommunity：已有完整记录的轮着重读，没轮到的沿用；新包每天有上限，按市场给的下载量先补大的', async t => {
+  const manifest = name => ({ name, version: '2.0.0', description: 'x', keywords: [], dsh: { bundle: {} } })
+  const today = '2026-11-17'
+  // 找两个名字：一个今天轮到重读，一个没轮到
+  const names = Array.from({ length: 40 }, (_, i) => `dsh-k${i}`)
+  const due = names.find(n => rotationDue(n, today, 4))
+  const notDue = names.find(n => !rotationDue(n, today, 4))
+  const old = n => ({ n, v: '1.0.0', w: 5, m: 5, inst: { b: true } })
+  t.mock.method(globalThis, 'fetch', fakeFetch({
+    [`registry.npmjs.org/${due}/latest`]: manifest(due),
+    'registry.npmjs.org/dsh-big/latest': manifest('dsh-big'),
+    'downloads/point/last-week/': {},
+  }))
+  const records = new Map()
+  const rows = [{ n: due, m: 1 }, { n: notDue, m: 1 }, { n: 'dsh-small', m: 3 }, { n: 'dsh-big', m: 900 }]
+  await addCommunity(records, rows, { previous: { [due]: old(due), [notDue]: old(notDue) }, today, wait: 1, newPerDay: 1 })
+  assert.equal(records.get(notDue).v, '1.0.0', '没轮到：沿用上次的')
+  assert.equal(records.get(due).v, '2.0.0', '轮到了：重读')
+  assert.ok(records.has('dsh-big'), '新包先补市场下载量大的')
+  assert.ok(!records.has('dsh-small'), '超过每天的上限，明天再补')
+})
+
+test('rotationDue：每隔 n 天正好轮到一次', () => {
+  const days = Array.from({ length: 8 }, (_, i) => `2026-11-${String(i + 1).padStart(2, '0')}`)
+  for (const name of ['dsh-a', '@x/dsh-b', 'meow']) assert.equal(days.filter(d => rotationDue(name, d, 4)).length, 2, name)
+  assert.ok(rotationDue('x', '2026-11-01', 1))
 })

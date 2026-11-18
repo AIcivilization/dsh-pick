@@ -230,6 +230,8 @@ async function catalogMeta() {
     anchor: cat.anchor || null,
     total: cat.total || Object.keys(packages).length,
     deepCount: Object.values(packages).filter(p => p && p.deep).length,
+    // 几个插件市场 + npm 合起来去重后的覆盖数（每日目录用新代码构建后才有）
+    cover: (cat.boards && cat.boards.overall && cat.boards.overall.cover) || null,
     source: cat.source || 'bundled',
     checkedAt: state.checkedAt || null,
   }

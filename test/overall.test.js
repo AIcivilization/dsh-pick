@@ -131,3 +131,15 @@ test('每个参与排名的 npm 包都带六个角度的分数（rec.oa）：面
   assert.equal(packages.tiny.ad, '2026-11-08')
   assert.equal(packages.arch.oa, undefined, '不进榜的不带')
 })
+
+test('覆盖数：几个市场 + npm 去重；市场里有、目录还没补进来的 npm 包也算，暂时不排名', () => {
+  const packages = { a: pkg('a'), b: pkg('b') }
+  const members = {
+    community: [{ n: 'a' }, { n: null, repo: 'https://github.com/y/gh-only', name: 'gh-only' }, { n: 'not-yet' }],
+    shop: [{ n: 'a' }, { n: 'b' }, { n: 'not-yet' }, { n: null, repo: 'https://github.com/y/gh-only', name: 'gh-only' }],
+    picks: [], official: [],
+  }
+  const o = buildOverall({ packages, members, now: NOW })
+  assert.deepEqual(o.cover, { all: 4, npm: 3, gh: 1, pending: 1, markets: { dshmarket: 3, 'dsh-m': 0, shop: 4, official: 0 } })
+  assert.ok(!o.rows.some(r => r.k === 'not-yet'))
+})

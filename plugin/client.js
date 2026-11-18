@@ -297,9 +297,18 @@ window.__ModuleLoader__.load({
       const catalog = !meta
         ? L('正在读取目录…', 'Loading catalog…')
         : meta.total
-          ? L(
-              `目录收录 ${meta.total.toLocaleString()} 个插件，其中 ${meta.deepCount} 个有去噪指标；数据截止 ${meta.anchor}。`,
-              `${meta.total.toLocaleString()} plugins in the catalog, ${meta.deepCount} with denoised metrics; data as of ${meta.anchor}.`)
+          ? meta.cover
+            // 几个插件市场 + npm 去重后的总数；旧目录没有，就只说 npm 上的包数
+            ? L(
+                `收录 ${meta.cover.all.toLocaleString()} 个插件（dshmarket、dsh-plugin-shop、dsh-m 精选、DeepSeek 官方和 npm 合起来去重），` +
+                  `其中 ${meta.cover.npm.toLocaleString()} 个发布在 npm、能一键安装，${meta.cover.gh.toLocaleString()} 个只在 GitHub；` +
+                  `npm 上下载最多的 ${meta.deepCount} 个有去噪指标。每天更新，数据截止 ${meta.anchor}。`,
+                `${meta.cover.all.toLocaleString()} plugins across dshmarket, dsh-plugin-shop, dsh-m picks, DeepSeek official and npm (deduplicated): ` +
+                  `${meta.cover.npm.toLocaleString()} on npm (one-click install), ${meta.cover.gh.toLocaleString()} GitHub-only; ` +
+                  `the ${meta.deepCount} most-downloaded have denoised metrics. Updated daily; data as of ${meta.anchor}.`)
+            : L(
+                `npm 上收录 ${meta.total.toLocaleString()} 个插件包（每天更新），其中下载最多的 ${meta.deepCount} 个有去噪指标；数据截止 ${meta.anchor}。`,
+                `${meta.total.toLocaleString()} plugin packages on npm (updated daily); the ${meta.deepCount} most-downloaded have denoised metrics; data as of ${meta.anchor}.`)
           : L('目录未生成：在 dsh-pick 目录跑一次 dsh-pick build', 'Catalog not built yet: run `dsh-pick build`')
 
       return h('div', { style: { color: C.text } },

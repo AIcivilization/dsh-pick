@@ -130,7 +130,7 @@ export async function buildToolDefinitions(deps = {}) {
   const installed = async () => {
     try { return deps.installed ? await deps.installed() : new Set() } catch { return new Set() }
   }
-  const header = cat => `目录数据截止 ${cat.anchor || '未知'}（npm 最近有数据的一天；npm 每日下载只在一天结束后汇总，常晚几天），共 ${num(cat.total)} 个插件。`
+  const header = cat => `目录数据截止 ${cat.anchor || '未知'}（npm 最近有数据的一天；npm 每日下载只在一天结束后汇总，常晚几天），npm 上共 ${num(cat.total)} 个插件包。`
   const CATS = allCategories()
 
   return [

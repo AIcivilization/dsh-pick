@@ -89,3 +89,14 @@ test('监控名单：npm 包名和 gh:owner/repo 都认，别的丢掉', async (
   const u = '/live?names=' + encodeURIComponent('a,@s/b,gh:o/r,../../x,gh:bad,a')
   assert.deepEqual(parseWatchNames(u), ['a', '@s/b', 'gh:o/r'])
 })
+
+test('shopPackages：商店里发到 npm 的包，包名校验过、去重', async () => {
+  const { shopPackages } = await import('../lib/boards.js')
+  const list = shopPackages({ plugins: [
+    { name: 'dsh-a', source: 'npm', repository: 'https://github.com/x/a' },
+    { name: 'dsh-a', source: 'npm' },
+    { name: 'gh-only', source: 'github', repository: 'https://github.com/x/g' },
+    { name: '../bad', source: 'npm' },
+  ] })
+  assert.deepEqual(list, [{ n: 'dsh-a', m: 0, repo: 'https://github.com/x/a' }])
+})

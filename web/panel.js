@@ -344,8 +344,13 @@ async function boot() {
   CAT = await res.json()
 
   const deepN = Object.values(CAT.packages).filter(p => p.deep).length
+  // 覆盖数：几个插件市场 + npm 合起来去重（每日目录用新代码构建后才有）；旧目录只说 npm 上的包数
+  const cover = CAT.boards && CAT.boards.overall && CAT.boards.overall.cover
+  const MKT = { dshmarket: 'dshmarket', shop: 'dsh-plugin-shop 商店', 'dsh-m': 'dsh-m 精选', official: 'DeepSeek 官方' }
   $('#meta').innerHTML =
-    `目录 <b>${num(CAT.total)}</b> 个插件 · 去噪指标 <b>${num(deepN)}</b> 个<br>` +
+    (cover
+      ? `收录 <b>${num(cover.all)}</b> 个插件（4 个市场 + npm 去重）· npm 上 <b>${num(cover.npm)}</b> 个 · 去噪指标 <b>${num(deepN)}</b> 个<br>`
+      : `npm 上 <b>${num(CAT.total)}</b> 个插件包 · 去噪指标 <b>${num(deepN)}</b> 个<br>`) +
     `数据截止 <b>${CAT.anchor}</b>（npm 最近有数据的一天）`
 
   const gapNote = CAT.gaps && CAT.gaps.length
@@ -353,7 +358,13 @@ async function boot() {
     : ''
   $('#foot').innerHTML =
     `<b>口径：</b>下载量含 CI、镜像、爬虫等非人类流量，不等于用户数；<b>日常基线</b>= 扣掉版本发布日与次日后的每日中位数，比原始下载量更接近真实使用量。<br>` +
-    `<b>覆盖范围：</b>npm 上带 <code>dsh-plugin</code> 关键字的 ${num(CAT.total)} 个包；去噪指标只算了周下载 Top ${num(deepN)}。目录每天重建一次，重跑 <code>dsh-pick build</code> 即可。<br>` +
+    (cover
+      ? `<b>覆盖范围：</b>把 ${Object.entries(cover.markets).map(([k, v]) => `${MKT[k] || esc(k)}（${num(v)} 条）`).join('、')}和 npm 上带 <code>dsh-plugin</code> 关键字的包合起来，` +
+        `按 npm 包名、GitHub 仓库去重，共 <b>${num(cover.all)}</b> 个插件：${num(cover.npm)} 个发布在 npm（能一键安装、有下载量），${num(cover.gh)} 个只在 GitHub。` +
+        `市场里一个仓库拆成好几条、几个市场互相重复收录，所以去重后比各市场条数相加少。` +
+        (cover.pending ? `其中 ${num(cover.pending)} 个 npm 包还没补进目录（每天补一批，几天补完），补进来之前不参与排名。` : '') +
+        `去噪指标只算了 npm 上周下载最多的 ${num(deepN)} 个。目录每天自动重建。<br>`
+      : `<b>覆盖范围：</b>npm 上带 <code>dsh-plugin</code> 关键字、或被插件市场收录的 ${num(CAT.total)} 个 npm 包；去噪指标只算了周下载最多的 ${num(deepN)} 个。目录每天自动重建。<br>`) +
     (IN_DSH
       ? `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。点各处的「+AI」，把数据发到对话里让 AI 结合你的场景分析；在对话里也可以直接问「哪个插件能做某某」，AI 会自己查这份目录。`
       : `<b>当前结论由本地规则生成</b>（依据就是对比表里的数字）。装上 DSH 插件版后，可以一键交给 AI，结合你的具体场景解释取舍。`) +
@@ -383,20 +394,22 @@ function bindEvents() {
   $('#btnFind').addEventListener('click', doSearch)
   $('#btnAi').addEventListener('click', runAiPick)
   // 比较清单：输入插件名加入
-  const addInput = $('#addCmp')
-  addInput.addEventListener('input', () => { sugItems = suggest(addInput.value); sugOn = sugItems.length ? 0 : -1; renderSug() })
-  addInput.addEventListener('keydown', e => {
-    if (!sugItems.length) return
-    if (e.key === 'ArrowDown') { sugOn = (sugOn + 1) % sugItems.length; renderSug(); e.preventDefault() }
-    else if (e.key === 'ArrowUp') { sugOn = (sugOn - 1 + sugItems.length) % sugItems.length; renderSug(); e.preventDefault() }
-    else if (e.key === 'Enter' && sugOn >= 0) { addFromSug(sugItems[sugOn].n); e.preventDefault() }
-    else if (e.key === 'Escape') { sugItems = []; renderSug() }
+  bindSuggest({
+    input: $('#addCmp'), box: $('#addSug'), has: n => picked.includes(n), hasText: '已在清单里',
+    onPick: n => { if (!picked.includes(n)) togglePick(n); $('#secCmp').scrollIntoView({ block: 'nearest' }) },
   })
-  addInput.addEventListener('blur', () => setTimeout(() => { sugItems = []; renderSug() }, 150))
-  $('#addSug').addEventListener('mousedown', e => {
-    const o = e.target.closest('[data-add]')
-    if (o) { e.preventDefault(); addFromSug(o.dataset.add) }
+  // 我的监控：「＋ 添加」打开输入框；选建议里的，或直接回车按输入的名字 / GitHub 地址加
+  const watchInput = $('#addWatch')
+  const watchSug = bindSuggest({
+    input: watchInput, box: $('#watchSug'), has: n => watch().includes(n), hasText: '已在监控里',
+    onPick: n => addToWatch(n), onEnter: text => addToWatch(text),
   })
+  $('#btnWatchAdd').addEventListener('click', () => {
+    const open = $('#watchAdd').classList.toggle('hidden') === false
+    $('#btnWatchAdd').setAttribute('aria-expanded', String(open))
+    if (open) watchInput.focus()
+  })
+  $('#watchAddGo').addEventListener('click', () => watchSug.submit())
   $('#need').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch() })
 
   document.querySelectorAll('.examples .chip').forEach(c => {
@@ -409,6 +422,7 @@ function bindEvents() {
       const t = b.dataset.tab
       // 每个标签一块内容：tab-pick / tab-rank / tab-watch
       document.querySelectorAll('#tabs button').forEach(x => $('#tab-' + x.dataset.tab).classList.toggle('hidden', x.dataset.tab !== t))
+      if (t === 'watch') layoutWatchDetail() // 标签页隐藏时量不出宽度，显示出来再选版式
       // 打开「我的监控」时，数据超过 6 小时没刷新就自动刷新一次
       if (t === 'watch' && watch().length && (!LIVE.at || Date.now() - Date.parse(LIVE.at) > 6 * 3600 * 1000) && !$('#btnWatchRefresh').disabled) refreshWatch()
     })
@@ -537,8 +551,6 @@ function renderPickBar() {
     : '<span class="none">还没有，点候选卡片或在右边输入插件名</span>'
 }
 
-let sugItems = []
-let sugOn = -1
 /** 按名字找插件：名字开头吻合的优先，其次名字里包含、关键字吻合；同档按周下载 */
 function suggest(q) {
   q = q.trim().toLowerCase()
@@ -551,20 +563,41 @@ function suggest(q) {
   }
   return out.sort((a, b) => a[0] - b[0] || (b[1].w || 0) - (a[1].w || 0)).slice(0, 8).map(x => x[1])
 }
-function renderSug() {
-  const box = $('#addSug')
-  if (!sugItems.length) { box.classList.add('hidden'); return }
-  box.innerHTML = sugItems.map((r, i) => `<div class="opt${i === sugOn ? ' on' : ''}" data-add="${esc(r.n)}" role="option">` +
-    `<b>${esc(r.n)}</b>${picked.includes(r.n) ? ' <em style="color:var(--ok-text);font-style:normal;font-size:11px">已在清单里</em>' : ''}` +
-    `<span>周下载 ${short(r.w)}${r.sc != null ? ` · 综合分 ${r.sc}` : ''} · ${esc(String(r.d || '').slice(0, 60))}</span></div>`).join('')
-  box.classList.remove('hidden')
-}
-function addFromSug(name) {
-  if (!picked.includes(name)) togglePick(name)
-  $('#addCmp').value = ''
-  sugItems = []
-  renderSug()
-  $('#secCmp').scrollIntoView({ block: 'nearest' })
+/**
+ * 输入框 + 下拉建议（比较清单、我的监控共用）：上下键选、回车加、Esc 收起。
+ * 没有建议、或没选中时回车：交给 onEnter（按输入的原文加），没有 onEnter 就不动
+ */
+function bindSuggest({ input, box, has, hasText, onPick, onEnter }) {
+  let items = []
+  let on = -1
+  const render = () => {
+    if (!items.length) { box.classList.add('hidden'); return }
+    box.innerHTML = items.map((r, i) => `<div class="opt${i === on ? ' on' : ''}" data-add="${esc(r.n)}" role="option">` +
+      `<b>${esc(r.n)}</b>${has(r.n) ? ` <em style="color:var(--ok-text);font-style:normal;font-size:11px">${hasText}</em>` : ''}` +
+      `<span>周下载 ${short(r.w)}${r.sc != null ? ` · 综合分 ${r.sc}` : ''} · ${esc(String(r.d || '').slice(0, 60))}</span></div>`).join('')
+    box.classList.remove('hidden')
+  }
+  const done = () => { input.value = ''; items = []; render() }
+  const pick = n => { onPick(n); done() }
+  const submit = () => {
+    if (items.length && on >= 0) return pick(items[on].n)
+    const text = input.value.trim()
+    if (text && onEnter && onEnter(text) !== false) done()
+  }
+  input.addEventListener('input', () => { items = suggest(input.value); on = items.length ? 0 : -1; render() })
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { submit(); e.preventDefault(); return }
+    if (!items.length) return
+    if (e.key === 'ArrowDown') { on = (on + 1) % items.length; render(); e.preventDefault() }
+    else if (e.key === 'ArrowUp') { on = (on - 1 + items.length) % items.length; render(); e.preventDefault() }
+    else if (e.key === 'Escape') { items = []; render() }
+  })
+  input.addEventListener('blur', () => setTimeout(() => { items = []; render() }, 150))
+  box.addEventListener('mousedown', e => {
+    const o = e.target.closest('[data-add]')
+    if (o) { e.preventDefault(); pick(o.dataset.add) }
+  })
+  return { submit }
 }
 
 /* ---------------- AI 精选：用 DSH 当前的模型挑插件 ---------------- */
@@ -1294,13 +1327,18 @@ function sparkSvg(daily, color) {
     '</svg>'
 }
 /** 在综合榜某个角度里排第几（只在存下来的头部里找） */
+// 综合榜每个角度的完整名次（和排行榜同一套排法），算一次存着，监控详情重画时清掉
+let ANGLE_ORDER = new Map()
 function angleRank(key, angle) {
   const o = CAT.boards && CAT.boards.overall
   if (!o || !o.rows.length || !o.rows[0].a) return null
-  const rows = o.rows.filter(r => r.a[angle] != null)
-    .sort((x, y) => angle === 'new' ? String(y.added || '').localeCompare(String(x.added || '')) || y.a.new - x.a.new : y.a[angle] - x.a[angle])
-  const i = rows.findIndex(r => r.k === key)
-  return i < 0 ? null : i + 1
+  if (!ANGLE_ORDER.has(angle)) {
+    const w = r => (r.n && CAT.packages[r.n] ? CAT.packages[r.n].w || 0 : 0)
+    const rows = overallPool(o).filter(r => r.a[angle] != null)
+      .sort((x, y) => angle === 'new' ? String(y.added || '').localeCompare(String(x.added || '')) || y.a.new - x.a.new : y.a[angle] - x.a[angle] || w(y) - w(x))
+    ANGLE_ORDER.set(angle, new Map(rows.map((r, i) => [r.k, i + 1])))
+  }
+  return ANGLE_ORDER.get(angle).get(key) || null
 }
 
 function renderWatchDetail(list) {
@@ -1308,6 +1346,7 @@ function renderWatchDetail(list) {
   if (!list.length) { sec.classList.add('hidden'); return }
   sec.classList.remove('hidden')
   $('#wdAsOf').textContent = LIVE.at ? `· ${new Date(LIVE.at).toLocaleString()} 刷新` : '· 还没刷新过，先显示目录数据'
+  ANGLE_ORDER = new Map()
   const recs = list.map(n => ({ n, r: watchRec(n) }))
   $('#wdHead').innerHTML = '<tr><th>指标</th>' + recs.map(({ n, r }, i) =>
     `<th><i style="background:${colorOf(i)}"></i>${esc((r && r.label) || n)}</th>`).join('') + '</tr>'
@@ -1341,7 +1380,7 @@ function renderWatchDetail(list) {
     ['分类排名', ({ r }) => cell(r, x => (x.crank ? `${esc(x.cat)} #${num(x.crank)}` : '—'))],
     ['综合榜排名', ({ n, r }) => cell(r, () => {
       const parts = Object.entries(ANG).map(([a, label]) => [label, angleRank(n, a)]).filter(([, v]) => v)
-      return parts.length ? parts.map(([l, v]) => `${l} #${v}`).join('<br>') : '<span style="color:var(--t3)">不在各角度前 120 名</span>'
+      return parts.length ? parts.map(([l, v]) => `${l} #${v}`).join('<br>') : '<span style="color:var(--t3)">没进综合榜</span>'
     })],
     ['综合推荐分', ({ n, r }) => cell(r, x => (x.sc != null ? `${x.sc}${changeOf(n, 'sc', x.sc, { asPct: false })}` : '—'))],
     ['收录于', ({ r }) => cell(r, x => (x.src && x.src.length ? srcChips(x.src, { short: true }) : '—'))],
@@ -1349,6 +1388,82 @@ function renderWatchDetail(list) {
   $('#wdBody').innerHTML = rows.map(([label, fn]) => (fn
     ? `<tr><td>${label}</td>${recs.map((x, i) => `<td>${fn(x, i)}</td>`).join('')}</tr>`
     : `<tr class="grp"><td colspan="${recs.length + 1}">${label}</td></tr>`)).join('')
+  // 窄屏版：同一份指标，按指标分块，每块一行一个插件
+  const names = recs.map(({ n, r }, i) => `<span class="nm" title="${esc((r && r.label) || n)}"><i style="background:${colorOf(i)}"></i>${esc((r && r.label) || n)}</span>`)
+  $('#wdStack').innerHTML = rows.map(([label, fn]) => (fn
+    ? `<div class="m"><div class="ml">${label}</div>${recs.map((x, i) => `<div class="r">${names[i]}<span class="v">${fn(x, i)}</span></div>`).join('')}</div>`
+    : `<div class="grp">${label}</div>`)).join('')
+  WD_COUNT = recs.length
+  layoutWatchDetail()
+}
+
+/**
+ * 监控详情选版式：右侧栏放得下整张表（每个插件一列）就用表格，放不下就用按指标分块的竖排版
+ * （手机那样只往下长，不用横着滚）。直接量表格的实际宽度：插件名长短、有没有「较上次」都会影响列宽，估不准。
+ * 拖动侧栏宽度时跟着切换
+ */
+let WD_COUNT = 0
+function layoutWatchDetail() {
+  const wrap = $('#wdTable')
+  if (!$('#secWatchDetail').clientWidth || !WD_COUNT) return // 标签页没显示时量不出宽度，显示出来再量
+  wrap.classList.remove('hidden')
+  const fits = wrap.scrollWidth <= wrap.clientWidth + 1
+  wrap.classList.toggle('hidden', !fits)
+  $('#wdStack').classList.toggle('hidden', fits)
+}
+if (typeof ResizeObserver !== 'undefined') {
+  let lastW = 0
+  new ResizeObserver(entries => {
+    const w = Math.round(entries[0].contentRect.width)
+    if (w !== lastW) { lastW = w; layoutWatchDetail() }
+  }).observe(document.getElementById('secWatchDetail'))
+}
+// 保险：有的环境（后台页、老内核）不触发 ResizeObserver，窗口大小变了也量一次；切到「我的监控」时也会量
+window.addEventListener('resize', () => layoutWatchDetail())
+
+/**
+ * 用户输入 → 监控名：目录里的包名直接用；GitHub 地址或 owner/repo：目录里有发到 npm 的就记包名，
+ * 没有就记 gh:owner/repo；其余像 npm 包名的也收（目录外的插件，刷新时去 npm 查）。认不出返回 ''
+ */
+function watchKeyOf(text) {
+  const t = text.trim().replace(/\/+$/, '').replace(/\.git$/, '')
+  if (CAT.packages[t]) return t
+  const lower = t.toLowerCase()
+  if (CAT.packages[lower]) return lower
+  const gh = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/.exec(t) || (!t.startsWith('@') && /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(t))
+  if (gh) {
+    const repo = `${gh[1]}/${gh[2]}`
+    const hit = Object.values(CAT.packages).filter(r => r.gh && r.gh.repo.toLowerCase() === repo.toLowerCase()).sort((a, b) => (b.w || 0) - (a.w || 0))[0]
+    return hit ? hit.n : 'gh:' + repo
+  }
+  const npm = /^(?:https?:\/\/)?(?:www\.)?npmjs\.com\/package\/(.+)$/.exec(t)
+  const name = (npm ? decodeURIComponent(npm[1]) : t).toLowerCase()
+  return /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(name) ? name : ''
+}
+
+/** 「＋ 添加」：加进监控，再只查这一个的实时数据（不动「较上次」用的快照） */
+function addToWatch(text) {
+  const key = watchKeyOf(text)
+  if (!key) { toast(`认不出「${text}」：输入 npm 包名，或 GitHub 仓库地址`); return false }
+  if (watch().includes(key)) { toast(`已经在我的监控里了：${watchName(key)}`); return true }
+  const before = watch().length
+  toggleWatch(key)
+  if (watch().length === before) return false // 满 30 个，toggleWatch 已提示
+  fetchLiveOne(key)
+  return true
+}
+async function fetchLiveOne(key) {
+  try {
+    const r = await fetch(`${P.live}?names=${encodeURIComponent(key)}`, { cache: 'no-store' })
+    const j = await r.json()
+    if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status)
+    const row = j.rows.find(x => x.name === key)
+    if (!row) return
+    LIVE = { ...LIVE, rows: { ...LIVE.rows, [key]: row } }
+    try { localStorage.setItem(LIVE_KEY, JSON.stringify(LIVE)) } catch { /* 存不下就只这次有效 */ }
+    if (!row.found) toast(`${watchName(key)}：${key.startsWith('gh:') ? 'GitHub 上查不到这个仓库' : 'npm 上查不到这个包'}，检查一下名字（不要的话点 × 移除）`)
+    renderWatch()
+  } catch { /* 没网就先显示目录数据，点「刷新」再查 */ }
 }
 
 async function refreshWatch() {
@@ -1386,7 +1501,8 @@ function renderWatch() {
       : `现在显示的是目录数据（截止 <b>${esc(CAT.anchor)}</b>）。`
   const host = $('#watchList')
   if (!list.length) {
-    host.innerHTML = '<div class="empty">还没有监控的插件。在「选插件」里挑几个，点「加入我的监控」。</div>'
+    $('#watchAdd').classList.remove('hidden') // 空的时候直接摆出输入框
+    host.innerHTML = '<div class="empty">还没有监控的插件。点上面的「＋ 添加」输入插件名，或在「选插件」、排行榜里点彩色的 +。</div>'
     $('#watchChart').innerHTML = ''
     return
   }
