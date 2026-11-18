@@ -455,6 +455,8 @@ function bindEvents() {
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-watch]')
     if (b) toggleWatch(b.dataset.watch)
+    const st = e.target.closest('[data-mine]')
+    if (st) toggleMine(st.dataset.mine)
     const un = e.target.closest('[data-unpick]')
     if (un) togglePick(un.dataset.unpick)
     const pk = e.target.closest('#aiList [data-pick]')
@@ -1287,17 +1289,27 @@ function saveSnapshots(at) {
   for (const n of watch()) {
     const r = watchRec(n)
     if (!r || !r.live) continue
-    const snap = { t: at, w: r.w ?? null, base: r.deep ? r.deep.base : null, s: r.gh ? r.gh.s : null, rank: r.rank ?? null, sc: r.sc ?? null }
+    const snap = { t: at, v: r.v || null, w: r.w ?? null, base: r.deep ? r.deep.base : null, s: r.gh ? r.gh.s : null, rank: r.rank ?? null, sc: r.sc ?? null, orank: angleRank(n, 'rec') }
     const list = (hist[n] || []).filter(x => x.t !== at)
     list.push(snap)
     hist[n] = list.slice(-30)
   }
   try { localStorage.setItem(HIST_KEY, JSON.stringify(hist)) } catch { /* 存不下就不记 */ }
 }
-/** 和上一份快照比：返回「较上次」的小字 */
+/**
+ * 拿哪一份快照当「上次」：最新一份往前、至少早 12 小时的那份（连点两次刷新，比的不是几分钟前的）；
+ * 没有那么早的，就用倒数第二份
+ */
+const BASE_GAP_MS = 12 * 3600 * 1000
+function baseSnap(list) {
+  if (list.length < 2) return null
+  const cur = Date.parse(list[list.length - 1].t)
+  for (let i = list.length - 2; i >= 0; i--) if (cur - Date.parse(list[i].t) >= BASE_GAP_MS) return list[i]
+  return list[list.length - 2]
+}
+/** 和「上次」的快照比：返回「较上次」的小字 */
 function changeOf(n, key, now, { lowerIsBetter = false, asPct = true } = {}) {
-  const list = loadHistory()[n] || []
-  const prev = list.length >= 2 ? list[list.length - 2] : null
+  const prev = baseSnap(loadHistory()[n] || [])
   if (!prev || prev[key] == null || now == null) return ''
   const diff = now - prev[key]
   const when = new Date(prev.t).toLocaleDateString()
@@ -1326,7 +1338,6 @@ function sparkSvg(daily, color) {
     segs.map(p => (p.length === 1 ? `<circle cx="${p[0].split(',')[0]}" cy="${p[0].split(',')[1]}" r="1.5" fill="${color}"/>` : `<polyline points="${p.join(' ')}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round"/>`)).join('') +
     '</svg>'
 }
-/** 在综合榜某个角度里排第几（只在存下来的头部里找） */
 // 综合榜每个角度的完整名次（和排行榜同一套排法），算一次存着，监控详情重画时清掉
 let ANGLE_ORDER = new Map()
 function angleRank(key, angle) {
@@ -1341,15 +1352,73 @@ function angleRank(key, angle) {
   return ANGLE_ORDER.get(angle).get(key) || null
 }
 
+/* ---------- 我的产品：在我的监控里标成自家的，排名时和对手比 ---------- */
+const MINE_KEY = 'dsh-pick-mine-v1'
+function mine() {
+  try { return JSON.parse(localStorage.getItem(MINE_KEY)) || [] } catch { return [] }
+}
+function toggleMine(n) {
+  const list = mine()
+  const on = !list.includes(n)
+  try { localStorage.setItem(MINE_KEY, JSON.stringify(on ? [...list, n] : list.filter(x => x !== n))) } catch { /* 存不下就只这次有效 */ }
+  toast(on ? `已标成我的产品：${watchName(n)}` : `取消了「我的产品」：${watchName(n)}`)
+  renderWatch()
+}
+const starBtn = n => {
+  const on = mine().includes(n)
+  return `<button class="star${on ? ' on' : ''}" data-mine="${esc(n)}" title="${on ? '是我的产品，点一下取消' : '标成我的产品（排名时算出和对手的差距）'}" aria-label="${on ? '取消我的产品' : '标成我的产品'}">${on ? '★' : '☆'}</button>`
+}
+
+/*
+ * 监控详情：
+ *   顶部「这次的变化」（和上一次刷新比，只列明显的）
+ *   选一个指标 → 每个插件一行横条，按名次排；我的产品标出第几、和第 1 名 / 下一名差多少
+ *   宽屏：下面是完整表格（每个插件一列）；窄屏：点哪个插件，下面列出它的全部数据
+ */
+const WD_METRIC_KEY = 'dsh-pick-wd-metric-v1'
+let WD_METRIC = (() => { try { return localStorage.getItem(WD_METRIC_KEY) || 'w' } catch { return 'w' } })()
+let WD_SEL = null
+let WD = null // { recs, rows }：这次画的数据，切指标、点插件时不用重算
+
+// kind：count 数量（对数刻度、差距按比例说）· pct 百分比（差距按百分点）· rank 名次 · days 天数（都是越小越好）
+const WD_METRICS = [
+  { k: 'w', label: '周下载', get: r => r.w, fmt: num, snap: 'w' },
+  { k: 'base', label: '日常基线', get: r => (r.deep ? r.deep.base : null), fmt: v => `${num(v)}/天`, snap: 'base' },
+  { k: 'growth', label: '环比', get: r => (r.deep ? r.deep.growth : null), fmt: pct, kind: 'pct' },
+  { k: 'm', label: '月下载', get: r => r.m, fmt: num },
+  { k: 'tot', label: '累计下载', get: r => r.total, fmt: num },
+  { k: 's', label: '星标', get: r => (r.gh ? r.gh.s : null), fmt: num, snap: 's', abs: true },
+  { k: 'orank', label: '综合榜名次', get: (r, n) => angleRank(n, 'rec'), fmt: v => `#${num(v)}`, kind: 'rank', snap: 'orank' },
+  { k: 'rank', label: 'npm 总榜', get: r => r.rank, fmt: v => `#${num(v)}`, kind: 'rank', snap: 'rank' },
+  { k: 'age', label: '最近发版', get: r => releaseAge(r), fmt: ageText, kind: 'days' },
+]
+const lowerBetter = m => m.kind === 'rank' || m.kind === 'days'
+
+/** 距离最近一次发版几天：有去噪数据用它的，没有用目录里最新版的发布时间 */
+function releaseAge(r) {
+  if (r.deep && r.deep.age != null) return r.deep.age
+  return r.t ? daysSince(String(r.t).slice(0, 10)) : null
+}
+
+/** a 比 b：差多少（给「落后第 1 名 …」「领先下一名 …」用） */
+function gapText(m, a, b) {
+  const d = Math.abs(a - b)
+  if (m.kind === 'rank') return `${num(d)} 名`
+  if (m.kind === 'days') return `${num(d)} 天`
+  if (m.kind === 'pct') return `${Math.round(d * 100)} 个百分点`
+  if (!b) return num(d)
+  const ratio = a / b
+  if (ratio >= 2) return `是它的 ${ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)} 倍`
+  return ratio >= 1 ? `多 ${Math.round((ratio - 1) * 100)}%` : `少 ${Math.round((1 - ratio) * 100)}%`
+}
+
 function renderWatchDetail(list) {
   const sec = $('#secWatchDetail')
-  if (!list.length) { sec.classList.add('hidden'); return }
+  if (!list.length) { sec.classList.add('hidden'); WD = null; return }
   sec.classList.remove('hidden')
-  $('#wdAsOf').textContent = LIVE.at ? `· ${new Date(LIVE.at).toLocaleString()} 刷新` : '· 还没刷新过，先显示目录数据'
   ANGLE_ORDER = new Map()
+  $('#wdAsOf').textContent = LIVE.at ? `· ${new Date(LIVE.at).toLocaleString()} 刷新` : '· 还没刷新过，先显示目录数据'
   const recs = list.map(n => ({ n, r: watchRec(n) }))
-  $('#wdHead').innerHTML = '<tr><th>指标</th>' + recs.map(({ n, r }, i) =>
-    `<th><i style="background:${colorOf(i)}"></i>${esc((r && r.label) || n)}</th>`).join('') + '</tr>'
   const ANG = { rec: '综合', use: '使用', rep: '口碑', stable: '稳定', rise: '增速' }
   const cell = (r, fn) => (r ? fn(r) : '—')
   const rows = [
@@ -1380,27 +1449,138 @@ function renderWatchDetail(list) {
     ['分类排名', ({ r }) => cell(r, x => (x.crank ? `${esc(x.cat)} #${num(x.crank)}` : '—'))],
     ['综合榜排名', ({ n, r }) => cell(r, () => {
       const parts = Object.entries(ANG).map(([a, label]) => [label, angleRank(n, a)]).filter(([, v]) => v)
-      return parts.length ? parts.map(([l, v]) => `${l} #${v}`).join('<br>') : '<span style="color:var(--t3)">没进综合榜</span>'
+      const ch = changeOf(n, 'orank', angleRank(n, 'rec'), { lowerIsBetter: true, asPct: false })
+      return parts.length ? parts.map(([l, v]) => `${l} #${num(v)}`).join('<br>') + ch : '<span style="color:var(--t3)">没进综合榜</span>'
     })],
     ['综合推荐分', ({ n, r }) => cell(r, x => (x.sc != null ? `${x.sc}${changeOf(n, 'sc', x.sc, { asPct: false })}` : '—'))],
     ['收录于', ({ r }) => cell(r, x => (x.src && x.src.length ? srcChips(x.src, { short: true }) : '—'))],
   ]
+  WD = { recs, rows }
+  const mineNow = mine()
+  if (!list.includes(WD_SEL)) WD_SEL = list.find(n => mineNow.includes(n)) || list[0]
+  if (!WD_METRICS.some(m => m.k === WD_METRIC)) WD_METRIC = 'w'
+  renderWdChanges(list)
+  paintWd()
+}
+
+/** 选中的指标、选中的插件变了：重画横条、单个插件、表格（数据不重算） */
+function paintWd() {
+  if (!WD) return
+  const { recs, rows } = WD
+  const mineNow = mine()
+  const nameOf = ({ n, r }) => (r && r.label) || watchName(n)
+  const selIdx = recs.findIndex(x => x.n === WD_SEL)
+
+  // 指标选单
+  $('#wdMetrics').innerHTML = WD_METRICS.map(m => `<button data-wdm="${m.k}" class="${m.k === WD_METRIC ? 'on' : ''}" role="tab" aria-selected="${m.k === WD_METRIC}">${m.label}</button>`).join('')
+
+  // 排名横条
+  const m = WD_METRICS.find(x => x.k === WD_METRIC)
+  const items = recs.map((x, i) => ({ ...x, i, v: x.r ? m.get(x.r, x.n) : null }))
+  const has = items.filter(x => x.v != null && Number.isFinite(x.v))
+    .sort((a, b) => (lowerBetter(m) ? a.v - b.v : b.v - a.v))
+  const none = items.filter(x => !has.includes(x))
+  // 横条长短：数量用对数（差几个数量级），名次、天数越小越长，百分比按原值；归一到 8%~100%
+  const score = v => (m.kind === 'pct' ? v : lowerBetter(m) ? -Math.log1p(v) : Math.log1p(Math.max(v, 0)))
+  const ss = has.map(x => score(x.v))
+  const lo = Math.min(...ss), hi = Math.max(...ss)
+  const len = v => (hi === lo ? 100 : 8 + (score(v) - lo) / (hi - lo) * 92)
+  const row = (x, k) => {
+    const isMine = mineNow.includes(x.n)
+    // 横条里只标有变化的（「持平」每行都写太吵）
+    const raw = m.snap ? changeOf(x.n, m.snap, x.v, { lowerIsBetter: lowerBetter(m), asPct: !(m.abs || m.kind === 'rank') }) : ''
+    const ch = raw.includes('flat') ? '' : raw.replace('较上次 ', '')
+    return `<div class="wb${x.n === WD_SEL ? ' sel' : ''}${isMine ? ' mine' : ''}${x.v == null ? ' none' : ''}" data-wd="${esc(x.n)}" role="button" tabindex="0" title="点一下看 ${esc(nameOf(x))} 的全部数据">` +
+      `<div class="wbt"><span class="wbr">${k != null ? k + 1 : '—'}</span>` +
+      `<span class="wbn"><i style="background:${colorOf(x.i)}"></i>${esc(nameOf(x))}${isMine ? '<span class="mtag">我的</span>' : ''}</span>` +
+      `<span class="wbv">${x.v != null ? m.fmt(x.v) : '—'}${ch}</span></div>` +
+      (x.v != null ? `<div class="wbb"><i style="width:${len(x.v).toFixed(1)}%;background:${colorOf(x.i)}"></i></div>` : '') + '</div>'
+  }
+  $('#wdBars').innerHTML = has.map((x, k) => row(x, k)).join('') + none.map(x => row(x, null)).join('')
+
+  // 我的产品：第几、落后第 1 名多少、领先下一名多少
+  const mineLines = has.map((x, k) => ({ x, k })).filter(({ x }) => mineNow.includes(x.n)).map(({ x, k }) => {
+    const top = has[0]
+    const next = has[k + 1]
+    const parts = [`<b>★ ${esc(nameOf(x))}</b> ${m.label}排第 <b>${k + 1}</b> / ${has.length}`]
+    if (k > 0) parts.push(`落后第 1 名 ${esc(nameOf(top))} ${gapText(m, x.v, top.v)}`)
+    else if (has.length > 1) parts.push('在你监控的插件里最好')
+    if (next) parts.push(`领先下一名 ${esc(nameOf(next))} ${gapText(m, x.v, next.v)}`)
+    return `<div>${parts.join('；')}</div>`
+  })
+  $('#wdMine').innerHTML = mineLines.join('')
+  $('#wdMine').classList.toggle('hidden', !mineLines.length)
+
+  // 宽屏的表格：每个插件一列，选中的那列高亮
+  const sel = i => (i === selIdx ? ' class="sel"' : '')
+  $('#wdHead').innerHTML = '<tr><th>指标</th>' + recs.map((x, i) =>
+    `<th${sel(i)}>${starBtn(x.n)}<i style="background:${colorOf(i)}"></i>${esc(nameOf(x))}</th>`).join('') + '</tr>'
   $('#wdBody').innerHTML = rows.map(([label, fn]) => (fn
-    ? `<tr><td>${label}</td>${recs.map((x, i) => `<td>${fn(x, i)}</td>`).join('')}</tr>`
+    ? `<tr><td>${label}</td>${recs.map((x, i) => `<td${sel(i)}>${fn(x, i)}</td>`).join('')}</tr>`
     : `<tr class="grp"><td colspan="${recs.length + 1}">${label}</td></tr>`)).join('')
-  // 窄屏版：同一份指标，按指标分块，每块一行一个插件
-  const names = recs.map(({ n, r }, i) => `<span class="nm" title="${esc((r && r.label) || n)}"><i style="background:${colorOf(i)}"></i>${esc((r && r.label) || n)}</span>`)
-  $('#wdStack').innerHTML = rows.map(([label, fn]) => (fn
-    ? `<div class="m"><div class="ml">${label}</div>${recs.map((x, i) => `<div class="r">${names[i]}<span class="v">${fn(x, i)}</span></div>`).join('')}</div>`
-    : `<div class="grp">${label}</div>`)).join('')
+
+  // 窄屏：选中的那个插件的全部数据
+  if (selIdx >= 0) {
+    const x = recs[selIdx]
+    $('#wdOne').innerHTML = `<div class="hd">${starBtn(x.n)}<i style="background:${colorOf(selIdx)}"></i>${esc(nameOf(x))}` +
+      `<span style="color:var(--t3);font-size:11px;font-weight:500;margin-left:auto">点上面的插件换一个看</span></div>` +
+      rows.map(([label, fn]) => (fn ? `<div class="kv"><span class="k">${label}</span><span class="v">${fn(x, selIdx)}</span></div>` : `<div class="grp">${label}</div>`)).join('')
+  }
   WD_COUNT = recs.length
   layoutWatchDetail()
 }
 
+/** 「这次的变化」：最近两次刷新的快照比，只列明显的（发了新版、下载涨跌两成以上、星标、名次变化），我的产品排前面 */
+function renderWdChanges(list) {
+  const box = $('#wdChanges')
+  const hist = loadHistory()
+  const mineNow = mine()
+  const items = []
+  let since = null
+  for (const n of list) {
+    const h = hist[n] || []
+    const prev = baseSnap(h)
+    if (!prev) continue
+    const cur = h[h.length - 1]
+    since = since == null || prev.t < since ? prev.t : since
+    const who = `<b>${esc(watchName(n))}</b>${mineNow.includes(n) ? '<span class="mtag">我的</span>' : ''}`
+    const its = []
+    const add = (text, good) => its.push(`<span class="it">${text.replace('{c}', good == null ? '' : good ? 'up' : 'down')}</span>`)
+    if (prev.v && cur.v && prev.v !== cur.v) add(`发了新版 v${esc(cur.v)}`)
+    const pctCh = (key, label) => {
+      if (!prev[key] || cur[key] == null) return
+      const r = (cur[key] - prev[key]) / prev[key]
+      if (Math.abs(r) >= 0.2) add(`${label} <span class="{c}">${r > 0 ? '+' : ''}${Math.round(r * 100)}%</span>`, r > 0)
+    }
+    pctCh('w', '周下载')
+    pctCh('base', '日常基线')
+    if (prev.s != null && cur.s != null && cur.s !== prev.s) add(`星标 <span class="{c}">${cur.s > prev.s ? '+' : ''}${num(cur.s - prev.s)}</span>`, cur.s > prev.s)
+    const rankCh = (key, label, min) => {
+      if (prev[key] == null || cur[key] == null) return
+      const d = cur[key] - prev[key]
+      if (Math.abs(d) >= min) add(`${label} <span class="{c}">${d < 0 ? '升' : '降'} ${num(Math.abs(d))} 名</span>`, d < 0)
+    }
+    rankCh('orank', '综合榜', 3)
+    rankCh('rank', 'npm 总榜', 5)
+    // 一个插件一行
+    if (its.length) items.push({ mine: mineNow.includes(n), n: its.length, html: `<div class="ln">${who}：${its.join('')}</div>` })
+  }
+  if (since == null) { box.classList.add('hidden'); return }
+  box.classList.remove('hidden')
+  const when = new Date(since).toLocaleString()
+  if (!items.length) {
+    box.className = 'wdch quiet'
+    box.innerHTML = `和上次刷新（${esc(when)}）比，没有明显变化。`
+    return
+  }
+  box.className = 'wdch'
+  items.sort((a, b) => b.mine - a.mine)
+  box.innerHTML = `<b>这次的变化</b><span style="color:var(--t3)">（和 ${esc(when)} 的数据比）</span>` + items.map(x => x.html).join('')
+}
+
 /**
- * 监控详情选版式：右侧栏放得下整张表（每个插件一列）就用表格，放不下就用按指标分块的竖排版
- * （手机那样只往下长，不用横着滚）。直接量表格的实际宽度：插件名长短、有没有「较上次」都会影响列宽，估不准。
- * 拖动侧栏宽度时跟着切换
+ * 监控详情选版式：右侧栏放得下整张表（每个插件一列）就用表格，放不下就在横条下面列出选中插件的全部数据。
+ * 直接量表格的实际宽度：插件名长短、有没有「较上次」都会影响列宽，估不准。拖动侧栏宽度时跟着切换
  */
 let WD_COUNT = 0
 function layoutWatchDetail() {
@@ -1409,7 +1589,7 @@ function layoutWatchDetail() {
   wrap.classList.remove('hidden')
   const fits = wrap.scrollWidth <= wrap.clientWidth + 1
   wrap.classList.toggle('hidden', !fits)
-  $('#wdStack').classList.toggle('hidden', fits)
+  $('#wdOne').classList.toggle('hidden', fits)
 }
 if (typeof ResizeObserver !== 'undefined') {
   let lastW = 0
@@ -1420,6 +1600,22 @@ if (typeof ResizeObserver !== 'undefined') {
 }
 // 保险：有的环境（后台页、老内核）不触发 ResizeObserver，窗口大小变了也量一次；切到「我的监控」时也会量
 window.addEventListener('resize', () => layoutWatchDetail())
+$('#secWatchDetail').addEventListener('click', e => {
+  const mt = e.target.closest('[data-wdm]')
+  if (mt) {
+    WD_METRIC = mt.dataset.wdm
+    try { localStorage.setItem(WD_METRIC_KEY, WD_METRIC) } catch { /* 记不住就算了 */ }
+    paintWd()
+    return
+  }
+  if (e.target.closest('[data-mine]')) return // 星标由 document 上的委托处理
+  const row = e.target.closest('[data-wd]')
+  if (row) { WD_SEL = row.dataset.wd; paintWd() }
+})
+$('#secWatchDetail').addEventListener('keydown', e => {
+  const row = e.target.closest('[data-wd]')
+  if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); WD_SEL = row.dataset.wd; paintWd() }
+})
 
 /**
  * 用户输入 → 监控名：目录里的包名直接用；GitHub 地址或 owner/repo：目录里有发到 npm 的就记包名，
@@ -1503,7 +1699,6 @@ function renderWatch() {
   if (!list.length) {
     $('#watchAdd').classList.remove('hidden') // 空的时候直接摆出输入框
     host.innerHTML = '<div class="empty">还没有监控的插件。点上面的「＋ 添加」输入插件名，或在「选插件」、排行榜里点彩色的 +。</div>'
-    $('#watchChart').innerHTML = ''
     return
   }
 
@@ -1520,7 +1715,7 @@ function renderWatch() {
     const name = r ? esc(r.label || n) : esc(n)
     const ver = r && r.v ? ` <span class="ver">v${esc(r.v)}</span>` : ''
     const live = r && r.live ? '<i class="livedot" title="实时数据：刚从 npm / GitHub 查的"></i>' : ''
-    const nameCell = `<span class="mc nm" title="${name}${r && r.v ? ' v' + esc(r.v) : ''}">${live}${name}${ver}</span>`
+    const nameCell = `<span class="mc nm" title="${name}${r && r.v ? ' v' + esc(r.v) : ''}">${starBtn(n)}${live}${name}${ver}</span>`
     const acts = `<span class="mc acts">${r ? linkBtns(r, { icon: true }) : ''}<button class="x" data-rm="${esc(n)}" title="从我的监控移除" aria-label="移除 ${name}">×</button></span>`
     if (!r) return `<div class="mrow">${nameCell}<span class="mc span">不在目录中，点「刷新」去 npm 查</span>${acts}</div>`
     const d = r.deep
@@ -1545,17 +1740,6 @@ function renderWatch() {
     b.addEventListener('click', () => saveWatch(watch().filter(x => x !== b.dataset.rm)) || renderWatch()))
 
   renderWatchDetail(list)
-
-  // 对数刻度横条图
-  const rows = list.map(watchRec).filter(r => r && r.w != null)
-  const max = Math.max(...rows.map(r => r.w), 1)
-  $('#watchChart').innerHTML = rows.map((r, i) => {
-    const w = Math.max(Math.log10(r.w + 1) / Math.log10(max + 1) * 100, 1.5)
-    return `<div class="hrow" style="display:grid;grid-template-columns:minmax(80px,38%) 1fr auto;align-items:center;gap:10px;padding:6px 0">` +
-      `<div style="font-size:12px;color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(i)};margin-right:6px"></i>${esc(r.n)}${r.rank ? ` <span style="color:var(--t3);font-size:10px">#${num(r.rank)}</span>` : ''}</div>` +
-      `<div style="height:14px;background:var(--soft);border-radius:4px"><div style="height:100%;width:${w}%;background:${colorOf(i)};border-radius:4px"></div></div>` +
-      `<div style="font-size:12px;font-weight:650;text-align:right">${num(r.w)}</div></div>`
-  }).join('')
 }
 
 /* ---------------- 导出结论（网页版） ---------------- */

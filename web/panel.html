@@ -242,20 +242,49 @@ table.cmp.wd .ch{display:block;font-size:10.5px;font-weight:600}
 table.cmp.wd .ch.up{color:var(--ok)}table.cmp.wd .ch.down{color:var(--bad)}table.cmp.wd .ch.flat{color:var(--t3);font-weight:400}
 table.cmp.wd .grp td{background:var(--soft);color:var(--t3);font-size:10.5px;font-weight:700;padding:4px 9px;text-align:left}
 table.cmp.wd svg.spark{display:block;margin-left:auto}
-/* 监控详情的窄屏版：按指标分块，每块一行一个插件，只往下长，不横向滚 */
-.wds .grp{margin:14px 0 4px;padding:4px 8px;border-radius:6px;background:var(--soft);color:var(--t3);font-size:10.5px;font-weight:700}
-.wds .grp:first-child{margin-top:0}
-.wds .m{padding:7px 2px 6px;border-bottom:1px solid var(--soft)}
-.wds .m:last-child{border-bottom:none}
-.wds .ml{color:var(--t3);font-size:11px;font-weight:600;margin-bottom:3px}
-.wds .r{display:flex;align-items:center;gap:8px;min-height:22px;font-size:12px}
-.wds .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t2)}
-.wds .nm i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:0}
-.wds .v{flex:none;max-width:62%;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
-.wds .ch{font-size:10.5px;font-weight:600}
-.wds .ch.up{color:var(--ok)}.wds .ch.down{color:var(--bad)}.wds .ch.flat{color:var(--t3);font-weight:400}
-.wds svg.spark{display:block}
-.wds .v .up{color:var(--ok)}.wds .v .down{color:var(--bad)}
+/* 监控详情：变化提醒 · 指标选单 · 我的产品和对手的差距 · 排名横条 · 单个插件的全部数据（窄屏） */
+.wdch{margin:0 0 12px;padding:9px 11px;border-radius:9px;background:var(--accent-bg);font-size:12px;line-height:1.7;color:var(--text)}
+.wdch b{font-weight:650}
+.wdch .ln{margin-top:3px}
+.wdch .it{display:inline-block;margin-left:8px;white-space:nowrap}
+.wdch .it + .it::before{content:'·';margin-right:8px;color:var(--t3)}
+.wdch .it .up{color:var(--ok)}.wdch .it .down{color:var(--bad)}
+.wdch.quiet{background:var(--soft);color:var(--t3)}
+.wdm{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
+.wdm button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--t2);font-family:inherit;font-size:11.5px;padding:3px 9px;border-radius:12px;cursor:pointer}
+.wdm button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.wdmine{margin:0 0 8px;font-size:12px;line-height:1.7;color:var(--t2)}
+.wdmine div{padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--warn,#f5a623) 12%,var(--panel));margin-bottom:4px}
+.wdmine b{color:var(--text)}
+.wdbars .wb{padding:6px 6px 7px;border-radius:8px;cursor:pointer}
+.wdbars .wb:hover{background:var(--row-hover)}
+.wdbars .wb.sel{background:var(--soft)}
+.wdbars .wb.mine{box-shadow:inset 3px 0 0 #f5a623}
+.wdbars .wbt{display:flex;align-items:center;gap:6px;font-size:12px;min-width:0}
+.wdbars .wbr{flex:none;width:22px;color:var(--t3);font-variant-numeric:tabular-nums;font-size:11px}
+.wdbars .wbn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-weight:600}
+.wdbars .wbn i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+.wdbars .wbv{flex:none;font-variant-numeric:tabular-nums;font-weight:650;color:var(--text)}
+.wdbars .wbv .ch{font-size:10.5px;font-weight:600;margin-left:5px}
+.wdbars .wbb{margin:4px 0 0 28px;height:6px;border-radius:3px;background:var(--soft)}
+.wdbars .wbb i{display:block;height:100%;border-radius:3px}
+.wdbars .none .wbv{color:var(--t3);font-weight:400}
+.ch.up{color:var(--ok)}.ch.down{color:var(--bad)}.ch.flat{color:var(--t3);font-weight:400}
+.mtag{display:inline-block;font-size:10px;font-weight:700;color:#b26b00;background:color-mix(in srgb,#f5a623 22%,transparent);border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:1px}
+button.star{appearance:none;border:none;background:none;padding:0 3px 0 0;margin:0;font-size:13px;line-height:1;cursor:pointer;color:var(--mute);font-family:inherit}
+button.star.on{color:#f5a623}
+.wdnote{margin-top:6px}
+.wdone{border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
+.wdone .hd{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:6px}
+.wdone .hd i{display:inline-block;width:9px;height:9px;border-radius:2px}
+.wdone .grp{margin:10px 0 2px;padding:3px 8px;border-radius:6px;background:var(--soft);color:var(--t3);font-size:10.5px;font-weight:700}
+.wdone .kv{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 2px;border-bottom:1px solid var(--soft);font-size:12px}
+.wdone .kv:last-child{border-bottom:none}
+.wdone .k{color:var(--t3);flex:none}
+.wdone .v{text-align:right;color:var(--text);display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px 6px}
+.wdone .v .ch{font-size:10.5px;font-weight:600}
+.wdone .v .up{color:var(--ok)}.wdone .v .down{color:var(--bad)}
+table.cmp.wd th.sel,table.cmp.wd td.sel{background:var(--soft)}
 td.best{color:var(--ok);font-weight:700}
 td.best::after{content:' ★';font-size:9px}
 .miss{color:var(--mute)}
@@ -534,14 +563,13 @@ td.down{color:var(--bad);font-weight:600}
     </div>
     <div class="section" id="secWatchDetail">
       <h2>监控详情 <span style="font-size:11.5px;color:var(--t3);font-weight:500" id="wdAsOf"></span></h2>
-      <p class="cap">每个插件一列，下载、版本、GitHub、市场位置都摆出来。「较上次」是和你上一次点刷新时比：每次刷新都会在本机存一份快照，盯自家产品和竞品的变化。</p>
+      <div id="wdChanges" class="wdch hidden"></div>
+      <div id="wdMetrics" class="wdm" role="tablist" aria-label="按哪一项排"></div>
+      <div id="wdMine" class="wdmine hidden"></div>
+      <div id="wdBars" class="wdbars"></div>
+      <p class="cap wdnote">横条按名次比长短，数值差太大时（下载量）用对数刻度。点 ☆ 把自家产品标成「我的」，排名时算出和对手的差距。「较上次」和上一次刷新比：每次刷新都在本机存一份快照。</p>
       <div class="tblwrap" id="wdTable"><table class="cmp wd"><thead id="wdHead"></thead><tbody id="wdBody"></tbody></table></div>
-      <div id="wdStack" class="wds hidden"></div>
-    </div>
-    <div class="section">
-      <h2>对比图</h2>
-      <p class="cap">对数刻度，否则头部插件会把其余压成一条线。</p>
-      <div id="watchChart"></div>
+      <div id="wdOne" class="wdone hidden"></div>
     </div>
   </div>
 
