@@ -59,6 +59,45 @@ window.__ModuleLoader__.load({
       }, children)
     }
 
+    const REPO = 'AIcivilization/dsh-pick'
+    const STAR_KEY = 'dsh-pick-stars-v1'
+
+    /** 「⭐ Star」：打开 GitHub 仓库页，用户在那里点星。顺带显示现有星数（取不到就不显示） */
+    function StarLink() {
+      const [stars, setStars] = useState(() => {
+        try { const c = JSON.parse(sessionStorage.getItem(STAR_KEY) || 'null'); return c ? c.n : null } catch { return null }
+      })
+      useEffect(() => {
+        let alive = true
+        try { if (sessionStorage.getItem(STAR_KEY)) return } catch {}
+        fetch('https://api.github.com/repos/' + REPO, { headers: { accept: 'application/vnd.github+json' } })
+          .then(r => (r.ok ? r.json() : null))
+          .then(j => {
+            if (!alive || !j || typeof j.stargazers_count !== 'number') return
+            setStars(j.stargazers_count)
+            try { sessionStorage.setItem(STAR_KEY, JSON.stringify({ n: j.stargazers_count })) } catch {}
+          })
+          .catch(() => {})
+        return () => { alive = false }
+      }, [])
+      return h('a', {
+        href: 'https://github.com/' + REPO,
+        target: '_blank',
+        rel: 'noopener',
+        title: L('觉得好用？到 GitHub 给 dsh-pick 点个星', 'Like it? Star dsh-pick on GitHub'),
+        style: {
+          display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none',
+          fontSize: 12, lineHeight: '18px', padding: '2px 10px', borderRadius: 6, whiteSpace: 'nowrap',
+          border: '1px solid ' + C.border, color: C.text,
+        },
+      },
+        h('span', { 'aria-hidden': true }, '⭐'),
+        'Star',
+        typeof stars === 'number' && stars > 0
+          ? h('span', { style: { color: C.sub, fontVariantNumeric: 'tabular-nums', borderLeft: '1px solid ' + C.border, paddingLeft: 6, marginLeft: 2 } }, stars.toLocaleString())
+          : null)
+    }
+
     /** 一条给用户自己在终端执行的命令：等宽显示，旁边一个「复制」 */
     function CommandLine({ command }) {
       const [copied, setCopied] = useState(false)
@@ -156,6 +195,7 @@ window.__ModuleLoader__.load({
           h('span', { style: { fontSize: 15, fontWeight: 650 } }, 'dsh-pick'),
           info && info.running ? h('span', { style: { fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums' } }, 'v' + info.running) : null,
           h(Btn, { onClick: upd.onClick, disabled: upd.disabled || busy, primary: upd.primary, title: upd.title }, upd.label),
+          h(StarLink),
           h('span', { style: { flex: 1 } }),
           phase === 'removed'
             ? h('span', { style: { fontSize: 12, color: C.sub } }, L('已卸载，重启 DSH 后彻底移除', 'Uninstalled; restart DSH to finish'))
