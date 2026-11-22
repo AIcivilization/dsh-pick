@@ -52,13 +52,17 @@ jobs:
       - name: 生成插件索引 index.json
         run: node scripts/market-index.mjs data/catalog.json out
 
+      # README 排名徽章：每个插件一个 shields.io endpoint 文件（lib/badges.js）
+      - name: 生成排名徽章
+        run: node scripts/badges.mjs data/catalog.json out
+
       - name: 推到 catalog 分支
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd out
           git init -q -b catalog
-          git add catalog.json meta.json index.json
+          git add catalog.json meta.json index.json badge
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -qm "目录 $(node -p "require('./meta.json').anchor")"
           git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" catalog

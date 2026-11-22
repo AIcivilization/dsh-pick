@@ -1,7 +1,7 @@
 {
   "name": "dsh-pick",
   "version": "0.7.4",
-  "description": "帮你在 DSH 生态里选对插件：说需求 → 找候选 → 多维比较 → 出结论。下载量是证据，AI 是推理。",
+  "description": "DSH 插件选型助手：几个插件市场和 npm 的 3 万多个插件合成一个榜，去噪排名、AI 精选、一键安装；插件作者可领 README 排名徽章。",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AIcivilization/dsh-pick.git"
@@ -72,7 +72,9 @@
     "npm-stats",
     "plugin-market",
     "marketplace",
-    "plugin-manager"
+    "plugin-manager",
+    "plugin-ranking",
+    "readme-badge"
   ],
   "license": "MIT",
   "engines": {

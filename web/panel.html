@@ -253,6 +253,13 @@ table.cmp.wd svg.spark{display:block;margin-left:auto}
 .wdm{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
 .wdm button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--t2);font-family:inherit;font-size:11.5px;padding:3px 9px;border-radius:12px;cursor:pointer}
 .wdm button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.wdbadge{margin-top:12px;font-size:12px}
+.wdbadge .hd{font-weight:600;color:var(--text);margin-bottom:6px}
+.wdbadge .bg{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line)}
+.wdbadge .bn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%;color:var(--t2)}
+.wdbadge img{height:20px;display:block}
+.wdbadge button{margin-left:auto}
+.wdbadge .cap{margin:6px 0 0}
 .wdmine{margin:0 0 8px;font-size:12px;line-height:1.7;color:var(--t2)}
 .wdmine div{padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--warn,#f5a623) 12%,var(--panel));margin-bottom:4px}
 .wdmine b{color:var(--text)}
@@ -570,6 +577,7 @@ td.down{color:var(--bad);font-weight:600}
       <p class="cap wdnote">横条按名次比长短，数值差太大时（下载量）用对数刻度。点 ☆ 把自家产品标成「我的」，排名时算出和对手的差距。「较上次」和上一次刷新比：每次刷新都在本机存一份快照。</p>
       <div class="tblwrap" id="wdTable"><table class="cmp wd"><thead id="wdHead"></thead><tbody id="wdBody"></tbody></table></div>
       <div id="wdOne" class="wdone hidden"></div>
+      <div id="wdBadge" class="wdbadge"></div>
     </div>
   </div>
 

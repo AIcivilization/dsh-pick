@@ -196,6 +196,13 @@ window.__ModuleLoader__.load({
           info && info.running ? h('span', { style: { fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums' } }, 'v' + info.running) : null,
           h(Btn, { onClick: upd.onClick, disabled: upd.disabled || busy, primary: upd.primary, title: upd.title }, upd.label),
           h(StarLink),
+          h('a', {
+            href: 'https://github.com/' + REPO + '/issues/new/choose',
+            target: '_blank',
+            rel: 'noopener',
+            title: L('提建议、报问题（GitHub Issues）', 'Ideas and bug reports (GitHub Issues)'),
+            style: { fontSize: 12, color: C.sub, textDecoration: 'none', whiteSpace: 'nowrap' },
+          }, L('反馈', 'Feedback')),
           h('span', { style: { flex: 1 } }),
           phase === 'removed'
             ? h('span', { style: { fontSize: 12, color: C.sub } }, L('已卸载，重启 DSH 后彻底移除', 'Uninstalled; restart DSH to finish'))

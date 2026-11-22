@@ -1460,7 +1460,40 @@ function renderWatchDetail(list) {
   if (!list.includes(WD_SEL)) WD_SEL = list.find(n => mineNow.includes(n)) || list[0]
   if (!WD_METRICS.some(m => m.k === WD_METRIC)) WD_METRIC = 'w'
   renderWdChanges(list)
+  renderWdBadges(list)
   paintWd()
+}
+
+/* ---------- README 排名徽章：每日构建给每个插件写一个 shields.io endpoint 文件（lib/badges.js） ---------- */
+const BADGE_BASE = 'https://raw.githubusercontent.com/AIcivilization/dsh-pick/catalog/badge/'
+const BADGE_LINK = 'https://github.com/AIcivilization/dsh-pick'
+const badgeImg = key => 'https://img.shields.io/endpoint?url=' + encodeURIComponent(BADGE_BASE + (key.startsWith('gh:') ? 'gh/' + key.slice(3) : key) + '.json')
+const badgeMd = key => `[![dsh-pick](${badgeImg(key)})](${BADGE_LINK})`
+
+/** 我的产品各给一个徽章和「复制」；还没标的，提示一句怎么拿 */
+function renderWdBadges(list) {
+  const box = $('#wdBadge')
+  const keys = list.filter(n => mine().includes(n))
+  box.innerHTML = keys.length
+    ? '<div class="hd">README 排名徽章</div>' +
+      keys.map(n => `<div class="bg"><span class="bn">${esc(watchName(n))}</span>` +
+        `<img src="${esc(badgeImg(n))}" alt="dsh-pick 排名徽章" loading="lazy" referrerpolicy="no-referrer">` +
+        `<button type="button" class="btn ghost sm" data-badge="${esc(n)}">复制 Markdown</button></div>`).join('') +
+      '<p class="cap">贴进插件的 README，名次每天跟着目录自动更新；点徽章会打开 dsh-pick。</p>'
+    : '<p class="cap">在上面给自家插件点 ☆ 标成「我的产品」，这里会给出贴进 README 的排名徽章。</p>'
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true } catch { /* iframe 里可能不让用，退回老办法 */ }
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.cssText = 'position:fixed;opacity:0'
+  document.body.appendChild(ta)
+  ta.select()
+  let ok = false
+  try { ok = document.execCommand('copy') } catch { /* 复制不了 */ }
+  ta.remove()
+  return ok
 }
 
 /** 选中的指标、选中的插件变了：重画横条、单个插件、表格（数据不重算） */
@@ -1609,6 +1642,12 @@ $('#secWatchDetail').addEventListener('click', e => {
     return
   }
   if (e.target.closest('[data-mine]')) return // 星标由 document 上的委托处理
+  const bd = e.target.closest('[data-badge]')
+  if (bd) {
+    const md = badgeMd(bd.dataset.badge)
+    copyText(md).then(ok => (ok ? toast('已复制徽章的 Markdown，贴进 README 就行') : toast('复制不了，手动复制这段：', md)))
+    return
+  }
   const row = e.target.closest('[data-wd]')
   if (row) { WD_SEL = row.dataset.wd; paintWd() }
 })

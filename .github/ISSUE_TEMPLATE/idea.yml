@@ -1,0 +1,16 @@
+name: 提建议 / Idea
+description: 想要的功能、哪里不好用、数据口径的意见
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你的建议
+      description: 想解决什么问题，希望它怎么做
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: 现在是怎么凑合的
+      description: 选填：现在遇到这种情况你怎么办

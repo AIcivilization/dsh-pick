@@ -2,16 +2,41 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-pick.svg?style=flat-square)](https://www.npmjs.com/package/dsh-pick)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-pick.svg?style=flat-square)](https://www.npmjs.com/package/dsh-pick)
+[![GitHub stars](https://img.shields.io/github/stars/AIcivilization/dsh-pick?style=flat-square)](https://github.com/AIcivilization/dsh-pick/stargazers)
 [![license](https://img.shields.io/npm/l/dsh-pick.svg?style=flat-square)](LICENSE)
+[![dsh-pick](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FAIcivilization%2Fdsh-pick%2Fcatalog%2Fbadge%2Fdsh-pick.json&style=flat-square)](#给你的插件加排名徽章)
 [![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/aicivilization/dsh-pick)
 
-**帮你在 DSH 生态里选对插件。**
+**帮你在 DSH（DeepSeek Harness）生态里选对插件。**
 
-说需求 → 找候选 → 多维比较 → 出结论。下载量只是证据，判断才算数。
+把 dshmarket、dsh-plugin-shop、dsh-m 精选、DeepSeek 官方和 npm 上的插件合成一份目录（3 万多个，去重），
+按去噪后的真实使用量、口碑、维护、稳定性排名。说出需求，它给你首选 / 备选 / 不推荐，在面板里一键安装。
+
+> Pick the right plugin for DeepSeek Harness. dsh-pick merges every DSH plugin market plus npm into one
+> deduplicated catalog (30k+ plugins), ranks them by denoised usage, reputation, maintenance and stability,
+> and installs with one click from the DSH sidebar. Plugin authors get a free README rank badge.
+
+<p>
+  <img src="https://raw.githubusercontent.com/AIcivilization/dsh-pick/main/docs/rank.jpg" width="300" alt="综合榜：几个市场合成一个榜，六个排序角度">
+  &nbsp;
+  <img src="https://raw.githubusercontent.com/AIcivilization/dsh-pick/main/docs/watch.jpg" width="300" alt="我的监控：盯自家产品和竞品，按指标排名、算差距">
+</p>
+
+**能做什么**
+
+- **选插件**：说需求找候选，或用「AI 精选」让 DSH 当前的大模型读完简介挑给你；候选卡片直接安装，装之前先告诉你能不能装
+- **综合榜**：几个插件市场合成一个榜，一个插件只出现一次；综合推荐、最多人用、口碑、稳定可靠、上升最快、新上架六个角度
+- **去噪指标**：npm 下载量被发版日的 CI、镜像流量放大好几倍，dsh-pick 扣掉这部分，算出日常基线
+- **比较清单**：任意几个插件逐项对比，标出每项最好的
+- **我的监控**：盯自家产品和竞品，看名次、差距和这次的变化
+- **和对话联动**：给 AI 注册了 4 个工具，在对话里直接问「哪个数据库插件靠谱」
+- **DSH「发现」索引源**：每天生成一份官方格式的插件索引
+- **README 排名徽章**：插件作者把名次挂进自己的 README，[见下文](#给你的插件加排名徽章)
+
+> 觉得好用？到右上角点个 ⭐ Star，也欢迎[提建议、报问题](https://github.com/AIcivilization/dsh-pick/issues/new/choose)。
 
 > 定位对比：`dsh-find-plugin` 负责「**找到**」（搜 GitHub 仓库，按 star 排）；
 > `dsh-pick` 负责「**挑对**」（算去噪指标，给首选 / 备选 / 不推荐）。
-> 一个 `find_dsh_plugin`，一个 `pick_plugin`。
 
 ---
 
@@ -27,6 +52,33 @@ dsh plugin --profile web add github:AIcivilization/dsh-pick  # 源码安装
 - **运行要求**：Node.js ≥ 20；DSH web profile（右侧栏面板 + 设置页）
 - **许可证**：[MIT](LICENSE)
 - **数据边界**：只读公开的 npm API 和本仓库的每日目录，不外传任何数据
+
+---
+
+## 给你的插件加排名徽章
+
+插件作者可以把自己插件在 dsh-pick 综合榜（综合推荐角度）上的名次挂进 README，每天跟着目录自动更新：
+
+| 名次 | 徽章写的是 | 颜色 |
+|---|---|---|
+| 前 10 名 | `#3 of 25,272` | 亮绿 |
+| 前 100 名 | `#42 of 25,272` | 绿 |
+| 前 10% | `top 3%` | 黄绿 |
+| 其余 | `top 45%` | 蓝 |
+| 收录了、还没排名 | `listed` | 灰 |
+
+**最省事**：在 dsh-pick 的「我的监控」里加上你的插件，点 ☆ 标成「我的产品」，「监控详情」最下面有「复制 Markdown」。
+
+**手写**：把下面的 `<包名>` 换成你的 npm 包名（带 scope 的照写，比如 `@scope/name`）：
+
+```markdown
+[![dsh-pick](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AIcivilization/dsh-pick/catalog/badge/<包名>.json)](https://github.com/AIcivilization/dsh-pick)
+```
+
+只在 GitHub、没发到 npm 的插件，把 `badge/<包名>.json` 换成 `badge/gh/<owner>/<repo>.json`（只有进了综合榜存下来的头部才有）。
+想让插件进榜：npm 包带 `dsh-plugin` 关键字、在 `package.json` 声明 `dsh.bundle`；被 dshmarket、dsh-plugin-shop 等市场收录也会进来。
+
+徽章文件由每日构建生成（`scripts/badges.mjs`），放在本仓库 `catalog` 分支的 `badge/` 目录，shields.io 读它画图。
 
 ---
 
@@ -94,6 +146,7 @@ dsh plugin --profile web add dsh-pick
 - **这次的变化**：和至少 12 小时前的那次刷新比，只列明显的（发了新版、下载涨跌两成以上、星标、名次变化），我的产品排前面
 - **按指标排**：选一个指标（周下载、日常基线、环比、星标、综合榜名次、npm 总榜、最近发版…），每个插件一行横条按名次排；我的产品写出第几、落后第 1 名多少、领先下一名多少
 - **全部数据**：侧栏够宽时是完整表格（每个插件一列）；窄的时候点哪个插件，下面列出它的全部数据（30 天走势、下载、版本、GitHub、市场位置）
+- **README 排名徽章**：标成「我的产品」的插件，最下面给出徽章预览和「复制 Markdown」（[说明](#给你的插件加排名徽章)）
 
 每次刷新在本机存一份快照，显示「较上次」的涨跌（排名写成升 / 降几名）；打开时数据超过 6 小时会自动刷新。
 
@@ -183,6 +236,7 @@ dsh-pick/
 │   ├── ai-pick.js      AI 精选：用 DSH 的大模型召回候选、按需求挑选
 │   ├── market-index.js 生成 DSH「发现」页用的插件索引（index.json）
 │   ├── market-source.js 把插件索引加进 DSH「发现」的索引源
+│   ├── badges.js       README 排名徽章：名次 → shields.io endpoint 文件
 │   ├── classify.js     13 类 + 其他，关键词加权分类
 │   ├── metrics.js      去噪指标：基线 / 增速 / 节奏 / 新鲜度 / 健康度
 │   ├── words.js        需求 → 搜索词（同义词 + 中文二元切分），CLI 与面板共用
@@ -190,7 +244,9 @@ dsh-pick/
 ├── data/catalog.json   随包自带的目录（兜底；每日更新的那份在 ~/.dsh/dsh-pick/）
 ├── scripts/
 │   ├── release.mjs     发版脚本（npm run release）
-│   └── catalog-meta.mjs 每日目录发布前的校验
+│   ├── catalog-meta.mjs 每日目录发布前的校验
+│   └── badges.mjs      每日构建时生成排名徽章文件（推到 catalog 分支 badge/）
+├── docs/               README 用的截图
 ├── test/               npm test（Node 自带的 node:test，不装任何依赖）
 ├── .github/workflows/catalog.yml  每天重建目录、推到 catalog 分支
 ├── plugin/

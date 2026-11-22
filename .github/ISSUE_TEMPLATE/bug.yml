@@ -1,0 +1,25 @@
+name: 报问题 / Bug
+description: 哪里不对、装不上、数据有误
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 你做了什么、看到了什么、本来应该是什么样
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: dsh-pick 版本
+      description: 设置 → dsh-pick 顶部写着，比如 v0.7.4
+  - type: input
+    id: dsh
+    attributes:
+      label: DSH 版本和客户端
+      description: 比如 dsh 0.3.1，桌面版 / 网页版
+  - type: textarea
+    id: more
+    attributes:
+      label: 截图或其他
