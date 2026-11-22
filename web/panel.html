@@ -147,6 +147,8 @@ table.rank td.nm .desc{min-width:150px;display:-webkit-box;-webkit-line-clamp:2;
 .srcchip{display:inline-block;font-size:10px;font-weight:500;color:var(--t2);background:var(--soft);border-radius:4px;padding:0 5px;margin:2px 3px 0 0;white-space:nowrap}
 .srcchip.off{color:var(--accent);background:var(--accent-bg)}
 .srcchip.gh{color:var(--t3)}
+.srcchip.ours{color:var(--warn-text);background:var(--warn-bg)}
+.cap.disclaim{margin-top:-2px;color:var(--t3);font-size:11px}
 table.rank td .sc{font-size:13px;font-weight:700;color:var(--text);cursor:help}
 /* 排行榜操作列的四个图标一样大：+、安装、GitHub、npm，都是 24×22 */
 .ib{appearance:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;padding:0;margin-right:4px;
@@ -523,6 +525,7 @@ td.down{color:var(--bad);font-weight:600}
         <button data-b="shop">商店榜</button>
       </div>
       <p class="cap" id="rankCap"></p>
+      <p class="cap disclaim">排名是 dsh-pick 按公开数据用自己的算法算的，不是 DSH / DeepSeek 官方排名，只供参考和比较。</p>
       <div class="filters" id="rankFilters">
         <button class="chip on" data-board="overall" data-m="rec">综合推荐</button>
         <button class="chip" data-board="overall" data-m="use">最多人用</button>

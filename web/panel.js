@@ -357,6 +357,7 @@ async function boot() {
     ? `<br><b>npm 缺数据的日子：</b>${CAT.gaps.map(esc).join('、')}（那几天全 npm 的下载统计都是 0，是 npm 自己没出数据），不参与日常基线和环比的计算。`
     : ''
   $('#foot').innerHTML =
+    `<b>排名说明：</b>所有榜单和综合分都是 dsh-pick 按公开数据（npm、GitHub、各插件市场）用自己的算法算的，不是 DSH / DeepSeek 官方排名，只供参考和比较。<br>` +
     `<b>口径：</b>下载量含 CI、镜像、爬虫等非人类流量，不等于用户数；<b>日常基线</b>= 扣掉版本发布日与次日后的每日中位数，比原始下载量更接近真实使用量。<br>` +
     (cover
       ? `<b>覆盖范围：</b>把 ${Object.entries(cover.markets).map(([k, v]) => `${MKT[k] || esc(k)}（${num(v)} 条）`).join('、')}和 npm 上带 <code>dsh-plugin</code> 关键字的包合起来，` +
@@ -504,7 +505,7 @@ function renderCands(need, { keepCompat = false } = {}) {
         (d ? '<span class="ok" title="有去噪指标，可参与健康度比较">✓ 可比较</span>' : '<span class="nook" title="未进入去噪范围（周下载 Top 之外），缺基线/环比/节奏">仅基础</span>') +
         `</div>` +
         `<div class="rk">${rankText(rec)}${rec.sc != null ? ` · 综合分 <b>${rec.sc}</b>` : ''}</div>` +
-        (rec.src && rec.src.length ? `<div>${srcChips(rec.src)}</div>` : '') +
+        ((rec.src && rec.src.length) || isOurs(rec) ? `<div>${srcChips(rec.src)}${oursTag(rec)}</div>` : '') +
         `<div class="d">${esc(rec.d)}</div>` +
         `<div class="kv">` +
           `<span>周 <b>${num(rec.w)}</b></span>` +
@@ -641,7 +642,7 @@ function renderAi() {
     const d = rec.deep
     const on = picked.includes(p.name)
     return `<div class="aip">` +
-      `<div class="top"><span class="nm">${esc(p.name)}</span>${rec.v ? `<span style="color:var(--t3);font-size:11px">v${esc(rec.v)}</span>` : ''}<span class="fit" title="模型判断的合适程度（0~100）">合适度 ${p.fit}</span></div>` +
+      `<div class="top"><span class="nm">${esc(p.name)}</span>${rec.v ? `<span style="color:var(--t3);font-size:11px">v${esc(rec.v)}</span>` : ''}${oursTag(rec)}<span class="fit" title="模型判断的合适程度（0~100）">合适度 ${p.fit}</span></div>` +
       (p.reason ? `<div class="why">${esc(p.reason)}</div>` : '') +
       (p.caveat ? `<div class="cav">⚠ ${esc(p.caveat)}</div>` : '') +
       `<div class="data">周下载 ${short(rec.w)}${d ? ` · 日常基线 ${short(d.base)}/天` : ''}${rec.gh ? ` · ★ ${short(rec.gh.s)}` : ''}${rec.sc != null ? ` · 综合分 ${rec.sc}` : ''}${d && d.age != null ? ` · ${ageText(d.age)}更新` : ''}</div>` +
@@ -869,6 +870,7 @@ function renderOuterBoard(board) {
   const nameCell = r => `<td class="nm">${esc(r.t || r.n || r.name)}${r.v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` : ''}` +
     (r.t ? `<div class="sub">${esc(r.n)}</div>` : '') +
     (!r.n ? '<div class="sub">只在 GitHub，没发到 npm</div>' : '') +
+    (isOurs((r.n && CAT.packages[r.n]) || r) ? `<div>${oursTag((r.n && CAT.packages[r.n]) || r, { short: true })}</div>` : '') +
     (r.d ? `<div class="sub desc" title="${esc(r.d)}">${esc(r.d)}</div>` : '') + `</td>`
   const actions = r => `<td class="lks">${watchBtn(watchKey(r))}${linkBtns({ n: r.n || '', ghUrl: r.repo || '' }, { icon: true })}</td>`
   const marketName = { official: 'DeepSeek 官方', community: '社区目录', shop: '这个商店' }[board]
@@ -930,6 +932,19 @@ function srcChips(src, { short = false } = {}) {
     return `<span class="srcchip${k === 'official' ? ' off' : ''}" title="收录于 ${esc(full)}">${esc(short ? MARKET_SHORT[k] || k : full)}</span>`
   }).join('')
 }
+
+/**
+ * dsh-pick 作者自己的插件（GitHub 账号 AIcivilization 下的）：照常按同一套算法排，
+ * 不加分、不置顶，只标明身份——用户该知道这是「裁判自己的队员」
+ */
+const AUTHOR_RE = /(^|github\.com\/|^gh:)aicivilization\//i
+function isOurs(x) {
+  if (!x) return false
+  return [x.repo, x.ghUrl, x.gh && x.gh.repo, x.k].some(u => u && AUTHOR_RE.test(String(u)))
+}
+const OURS_TITLE = 'dsh-pick 作者自己做的插件。排名和其他插件用同一套算法，没有加分'
+const oursTag = (x, { short = false } = {}) =>
+  isOurs(x) ? `<span class="srcchip ours" title="${OURS_TITLE}">${short ? 'dsh-pick 作者' : 'dsh-pick 作者的作品'}</span>` : ''
 
 /**
  * 综合榜：几个插件市场合成一个榜（每日构建时算好，见 lib/overall.js），一个插件一行。
@@ -1047,7 +1062,7 @@ function renderOverall() {
     const links = linkBtns(rec || { n: r.n || '', ghUrl: r.repo || '' }, { icon: true })
     return `${trOpen(on)}${rankCell(i)}` +
       `<td class="nm"><div class="nmline" title="${esc(name)}${v ? ' v' + esc(v) : ''}">${esc(name)}${v ? ` <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(v)}</span>` : ''}</div>` +
-        `<div class="chips">${srcChips(r.src, { short: true })}${r.n ? '' : '<span class="srcchip gh" title="只在 GitHub，没发到 npm">GitHub</span>'}</div>` +
+        `<div class="chips">${srcChips(r.src, { short: true })}${r.n ? '' : '<span class="srcchip gh" title="只在 GitHub，没发到 npm">GitHub</span>'}${oursTag(rec || r, { short: true })}</div>` +
         (desc ? `<div class="sub desc" title="${esc(desc)}">${esc(desc)}</div>` : '') + `</td>` +
       `<td class="r">${cell}</td>` +
       `<td class="r">${w != null ? short(w) : '—'}</td>` +
@@ -1070,7 +1085,7 @@ function renderRank() {
   const metric = onChip ? onChip.dataset.m : ''
   const cat = $('#rankCat').value
   const inCat = r => !cat || r.cat === cat
-  const nameCell = r => `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span></td>`
+  const nameCell = r => `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>${isOurs(r) ? `<div>${oursTag(r, { short: true })}</div>` : ''}</td>`
   const b = (on, text) => (on ? `<b>${text}</b>` : text)
   // 分类是 npm 目录自己算的，别的榜没有这个字段
   $('#rankCat').classList.toggle('hidden', board !== 'npm' && board !== 'gh')
@@ -1118,6 +1133,7 @@ function renderRank() {
       const age = daysSince(r.gh.p)
       return trOpen(on) + rankCell(i) +
         `<td class="nm">${esc(r.n)} <span style="color:var(--t3);font-weight:400;font-size:11px">v${esc(r.v)}</span>` +
+          (isOurs(r) ? `<div>${oursTag(r, { short: true })}</div>` : '') +
           (shared.get(r.n) > 1 ? `<div class="sub" title="仓库 ${esc(r.gh.repo)} 里有 ${shared.get(r.n)} 个插件，数据相同，只列一行">等 ${shared.get(r.n)} 个插件共用这个仓库</div>` : '') +
         `</td>` +
         `<td><span class="catpill">${esc(r.cat)}</span></td>` +
