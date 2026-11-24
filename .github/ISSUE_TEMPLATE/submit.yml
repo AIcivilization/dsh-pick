@@ -1,0 +1,35 @@
+name: 提交插件 / Submit a plugin
+description: 你的 DSH 插件不在 dsh-pick 的榜单里？提交收录
+title: "[提交插件] "
+labels: [submit]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        大部分插件不用提交就会自动收进来：npm 上带 `dsh-plugin` 关键字的包，以及 dshmarket、dsh-plugin-shop、dsh-m 精选、DeepSeek 官方收录的插件。
+        如果你的插件不在其中，在这里提交。收录只解决「能不能进榜」，名次仍然按同一套算法算，不会因为提交而加分。
+  - type: input
+    id: where
+    attributes:
+      label: npm 包名或 GitHub 仓库地址
+      placeholder: dsh-example 或 https://github.com/owner/repo
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 一句话说明它做什么
+    validations:
+      required: true
+  - type: checkboxes
+    id: check
+    attributes:
+      label: 提交前确认
+      options:
+        - label: package.json 里声明了 `dsh.bundle`（没有的话 DSH 装不了，也不会进榜）
+        - label: 我是作者或维护者，或者已征得作者同意
+  - type: textarea
+    id: more
+    attributes:
+      label: 其他（选填）
+      description: 比如适用的 DSH 版本、web 还是 tui 客户端

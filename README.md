@@ -84,6 +84,14 @@ dsh plugin --profile web add github:AIcivilization/dsh-pick  # 源码安装
 
 ---
 
+## 提交你的插件
+
+大部分插件不用提交：npm 上带 `dsh-plugin` 关键字的包，以及 dshmarket、dsh-plugin-shop、dsh-m 精选、DeepSeek 官方收录的插件，每天会自动收进来。
+不在其中的，用 [「提交插件」表单](https://github.com/AIcivilization/dsh-pick/issues/new?template=submit.yml) 提交（面板排行榜和设置页都有入口），我们核对后收录。
+收录只解决「能不能进榜」，名次仍按同一套算法算，不会因为提交而加分。
+
+---
+
 ## 为什么需要它
 
 npm 官网和各类 stat 站能看数字，但看数字回答不了「我该装哪个」。

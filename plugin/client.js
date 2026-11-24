@@ -397,6 +397,19 @@ window.__ModuleLoader__.load({
           market ? h(CommandLine, { command: market.url }) : null,
         ),
 
+        h(Section, { title: L('提交插件', 'Submit a plugin') },
+          h('div', null, L(
+            'npm 上带 dsh-plugin 关键字的包、各插件市场收录的插件会自动进榜。你的插件不在其中，可以提交收录；收录只管进榜，名次仍按同一套算法算。',
+            'Packages with the dsh-plugin keyword and plugins listed by the markets are included automatically. If yours is missing, submit it; inclusion does not change how it is ranked.')),
+          h('div', { style: { marginTop: 8 } },
+            h('a', {
+              href: 'https://github.com/' + REPO + '/issues/new?template=submit.yml',
+              target: '_blank',
+              rel: 'noopener',
+              style: { fontSize: 12, color: C.accent, textDecoration: 'none' },
+            }, L('提交我的插件 →', 'Submit my plugin →'))),
+        ),
+
         h(Section, { title: L('数据口径', 'About the data') },
           h('div', null, catalog),
           meta && meta.total ? h('div', { style: { marginTop: 4 } }, meta.source === 'remote'

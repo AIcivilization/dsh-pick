@@ -149,6 +149,8 @@ table.rank td.nm .desc{min-width:150px;display:-webkit-box;-webkit-line-clamp:2;
 .srcchip.gh{color:var(--t3)}
 .srcchip.ours{color:var(--warn-text);background:var(--warn-bg)}
 .cap.disclaim{margin-top:-2px;color:var(--t3);font-size:11px}
+.cap.disclaim .submit{margin-left:6px;color:var(--accent);text-decoration:none;white-space:nowrap}
+.cap.disclaim .submit:hover{text-decoration:underline}
 table.rank td .sc{font-size:13px;font-weight:700;color:var(--text);cursor:help}
 /* 排行榜操作列的四个图标一样大：+、安装、GitHub、npm，都是 24×22 */
 .ib{appearance:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;padding:0;margin-right:4px;
@@ -525,7 +527,7 @@ td.down{color:var(--bad);font-weight:600}
         <button data-b="shop">商店榜</button>
       </div>
       <p class="cap" id="rankCap"></p>
-      <p class="cap disclaim">排名是 dsh-pick 按公开数据用自己的算法算的，不是 DSH / DeepSeek 官方排名，只供参考和比较。</p>
+      <p class="cap disclaim">排名是 dsh-pick 按公开数据用自己的算法算的，不是 DSH / DeepSeek 官方排名，只供参考和比较。<a class="submit" href="https://github.com/AIcivilization/dsh-pick/issues/new?template=submit.yml" target="_blank" rel="noopener">没找到你的插件？提交收录</a></p>
       <div class="filters" id="rankFilters">
         <button class="chip on" data-board="overall" data-m="rec">综合推荐</button>
         <button class="chip" data-board="overall" data-m="use">最多人用</button>
