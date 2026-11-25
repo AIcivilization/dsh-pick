@@ -257,6 +257,7 @@ async function onInstallClick(btn) {
       renderCands($('#need').value.trim())
       renderRank()
       renderAi()
+      renderOurs()
       return
     }
     toast(j.message || '安装失败', j.command)
@@ -266,6 +267,32 @@ async function onInstallClick(btn) {
   btn.disabled = false
   btn.classList.remove('confirm')
   label('安装')
+}
+
+/* ---------- dsh-pick 作者的其他作品：页脚上方一个可展开的介绍区，和榜单分开 ---------- */
+// 只列这几个（作者挑的），而且只列最近 60 天内还在更新的；排名不受影响
+const OUR_WORKS = ['dsh-vps-manager', 'dsh-vps', 'dsh-model', 'dsh-her', 'dsh-mishu', 'dsh-tingdong', 'dsh-audiobook', 'dsh-checkin-all']
+function renderOurs() {
+  // 最近一次发版或提交：有的记录没有发版时间（manifest 轮换着读），就看 GitHub 最近提交
+  const lastOf = r => [r.deep && r.deep.lastRelease, r.t && String(r.t).slice(0, 10), r.gh && r.gh.p].filter(Boolean).sort().pop() || ''
+  const list = OUR_WORKS.map(n => CAT.packages[n]).filter(r => {
+    if (!r) return false
+    const age = daysSince(lastOf(r))
+    return age != null && age <= 60
+  })
+  $('#secOurs').classList.toggle('hidden', !list.length)
+  if (!list.length) return
+  $('#oursN').textContent = list.length + ' 个'
+  $('#oursList').innerHTML = list.map(r => {
+    const age = daysSince(lastOf(r))
+    return `<div class="ow">` +
+      `<div class="owt"><span class="nm">${esc(r.n)}</span> <span class="v">v${esc(r.v)}</span>` +
+        `<span class="owa">${watchBtn(r.n)}${installArea(r, { icon: true })}${linkBtns(r, { icon: true })}</span></div>` +
+      (r.d ? `<div class="owd" title="${esc(r.d)}">${esc(r.d)}</div>` : '') +
+      `<div class="owk">周下载 ${short(r.w)}${r.gh && r.gh.s ? ` · ★ ${short(r.gh.s)}` : ''} · ${ageText(age)}更新${r.sc != null ? ` · 综合分 ${r.sc}` : ''}</div>` +
+    `</div>`
+  }).join('') +
+    '<p class="cap">这些是 dsh-pick 作者自己做的插件，放在这里只是介绍；在各个榜单里，它们和其他插件用同一套算法排名，没有加分。</p>'
 }
 
 /* ---------------- 排名文案与外链按钮 ---------------- */
@@ -372,6 +399,13 @@ async function boot() {
     gapNote
 
   await loadInstalled()
+  renderOurs()
+  $('#btnOurs').addEventListener('click', () => {
+    const open = $('#oursList').classList.toggle('hidden') === false
+    $('#btnOurs').setAttribute('aria-expanded', String(open))
+    $('#secOurs').classList.toggle('open', open)
+    if (open) renderOurs()
+  })
   await loadAiAvailable()
   if (IN_DSH) {
     ;['#aiCands', '#aiVerdict', '#aiWatch'].forEach(id => $(id).classList.remove('hidden'))
@@ -466,7 +500,7 @@ function bindEvents() {
     const ai = e.target.closest('#aiList [data-install]')
     if (ai) onInstallClick(ai)
     // 排行榜里的「安装」（搜索结果卡片上的由卡片自己处理）
-    const ib = e.target.closest('#rankBody [data-install]')
+    const ib = e.target.closest('#rankBody [data-install], #oursList [data-install]')
     if (ib) onInstallClick(ib)
   })
 
